@@ -1,0 +1,42 @@
+name: MacNetStatus
+options:
+  bundleIdPrefix: com.example
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    GENERATE_INFOPLIST_FILE: YES
+    PRODUCT_BUNDLE_IDENTIFIER: com.example.MacNetStatus
+targets:
+  MacNetStatus:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_NAME: MacNetStatus
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_LSUIElement: YES
+        CODE_SIGN_STYLE: Automatic
+    dependencies: []
+  MacNetStatusTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: MacNetStatus
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.MacNetStatusTests
+schemes:
+  MacNetStatus:
+    build:
+      targets:
+        MacNetStatus: all
+        MacNetStatusTests: [test]
+    test:
+      targets:
+        - MacNetStatusTests
