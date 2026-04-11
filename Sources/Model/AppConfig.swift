@@ -21,7 +21,7 @@ struct AppConfig: Codable, Equatable {
     var launchAtLoginEnabled: Bool
     var customTarget: CustomPingTarget?
 
-    static let `default` = AppConfig(
+    static let defaults = AppConfig(
         pingIntervalSeconds: 1,
         dnsIntervalSeconds: 15,
         pingTimeoutMs: 1_000,

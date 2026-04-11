@@ -20,12 +20,12 @@ final class SettingsStore: ObservableObject {
         {
             config = decoded
         } else {
-            config = .default
+            config = .defaults
         }
     }
 
     func resetDefaults() {
-        config = .default
+        config = .defaults
     }
 
     private func persist() {

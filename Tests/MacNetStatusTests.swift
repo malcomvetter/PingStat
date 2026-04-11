@@ -16,7 +16,7 @@ final class MacNetStatusTests: XCTestCase {
             ),
             endpointStatuses: [:],
             dnsStatus: DNSCheckStatus(),
-            config: .default
+            config: .defaults
         )
 
         _ = evaluator.evaluate(input)
@@ -70,7 +70,7 @@ final class MacNetStatusTests: XCTestCase {
                 .google: google
             ],
             dnsStatus: DNSCheckStatus(),
-            config: .default
+            config: .defaults
         )
 
         _ = evaluator.evaluate(input)
@@ -96,7 +96,7 @@ final class MacNetStatusTests: XCTestCase {
             ),
             endpointStatuses: [:],
             dnsStatus: dns,
-            config: .default
+            config: .defaults
         )
 
         _ = evaluator.evaluate(input)
