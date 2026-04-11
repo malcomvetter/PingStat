@@ -35,6 +35,18 @@ sudo xcodebuild -license accept
 ./scripts/test.sh
 ```
 
+Both scripts regenerate the Xcode project from `project.yml` before running so
+local generated files do not drift from source.
+
+## Troubleshooting
+
+If you see `Build input file cannot be found ... AppContainer.swift` (or similar
+missing source file errors), your local generated project is stale. Regenerate:
+
+```bash
+xcodegen generate
+```
+
 ## Notes
 
 - Menu bar icon is monochrome and reflects current health state.
