@@ -117,6 +117,41 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Alert banners") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(viewModel.notificationBannerHelp.headline)
+                        .font(.body.weight(.semibold))
+                    Text(viewModel.notificationBannerHelp.detail)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 2)
+
+                HStack(spacing: 12) {
+                    Button("Refresh status") {
+                        Task { await viewModel.refreshNotificationBannerHelp() }
+                    }
+                    Button("Open System Settings…") {
+                        viewModel.openSystemNotificationSettings()
+                    }
+                }
+                if viewModel.notificationBannerHelp.showRequestPermissionButton {
+                    Button("Request permission…") {
+                        Task { await viewModel.requestNotificationPermissionFromSettings() }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("If notification icons still look blank after adding an app icon: quit PingStat, then in Terminal run:")
+                    Text("killall NotificationCenter")
+                        .font(.system(.caption, design: .monospaced))
+                    Text("That restarts Notification Center; then reopen PingStat.")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Custom target") {
                 TextField("Label", text: customLabelBinding())
                 TextField("IP Address", text: customIPBinding())
@@ -138,6 +173,9 @@ struct SettingsView: View {
         }
         .padding(12)
         .frame(width: 520, height: 520)
+        .onAppear {
+            Task { await viewModel.refreshNotificationBannerHelp() }
+        }
     }
 
     private func binding<T>(_ keyPath: WritableKeyPath<AppConfig, T>) -> Binding<T> {

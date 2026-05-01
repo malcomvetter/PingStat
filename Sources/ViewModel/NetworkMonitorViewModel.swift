@@ -14,6 +14,7 @@ final class NetworkMonitorViewModel: ObservableObject {
         updatedAt: Date()
     )
     @Published private(set) var lowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
+    @Published private(set) var notificationBannerHelp: NotificationBannerHelp = .unknown
 
     let settingsStore: SettingsStore
 
@@ -79,6 +80,19 @@ final class NetworkMonitorViewModel: ObservableObject {
         }
     }
 
+    func refreshNotificationBannerHelp() async {
+        notificationBannerHelp = await notificationService.bannerHelpSnapshot()
+    }
+
+    func openSystemNotificationSettings() {
+        notificationService.openSystemNotificationsSettings()
+    }
+
+    func requestNotificationPermissionFromSettings() async {
+        _ = await notificationService.requestAuthorizationFromUserPrompt()
+        await refreshNotificationBannerHelp()
+    }
+
     func meanText(for endpoint: EndpointStatus) -> String {
         guard let mean = endpoint.meanLast5Ms else { return "--" }
         return "\(Int(mean.rounded())) ms"
@@ -89,7 +103,7 @@ final class NetworkMonitorViewModel: ObservableObject {
         case .offline:
             return .red
         case .degraded:
-            return .yellow
+            return .orange
         case .healthy, .blazing:
             return .green
         }

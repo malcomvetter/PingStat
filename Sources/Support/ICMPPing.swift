@@ -32,20 +32,25 @@ enum ICMPPing {
         }
         defer { close(fd) }
 
+        let peerLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let connectResult = withUnsafePointer(to: &peer) { peerPtr in
+            peerPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                connect(fd, sa, peerLen)
+            }
+        }
+        guard connectResult == 0 else {
+            throw ICMPPingError.socketFailed(errno: errno)
+        }
+
         let identifier = UInt16.random(in: .min ... .max)
         let sequence = nextSequence()
         let sentNanos = DispatchTime.now().uptimeNanoseconds
 
         let packet = buildEchoRequest(identifier: identifier, sequence: sequence, sentNanos: sentNanos)
-        let peerLen = socklen_t(MemoryLayout<sockaddr_in>.size)
 
         let sendResult = packet.withUnsafeBytes { rawBuffer -> ssize_t in
             guard let base = rawBuffer.baseAddress else { return -1 }
-            return withUnsafePointer(to: &peer) { peerPtr in
-                peerPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
-                    sendto(fd, base, packet.count, 0, sa, peerLen)
-                }
-            }
+            return send(fd, base, packet.count, 0)
         }
         guard sendResult == ssize_t(packet.count) else {
             throw ICMPPingError.sendFailed(errno: errno)
@@ -63,7 +68,7 @@ enum ICMPPing {
 
             let recvLen = buffer.withUnsafeMutableBytes { rawBuffer -> ssize_t in
                 guard let base = rawBuffer.baseAddress else { return ssize_t(-1) }
-                return recvfrom(fd, base, rawBuffer.count, 0, nil, nil)
+                return recv(fd, base, rawBuffer.count, 0)
             }
 
             if recvLen < 0 {
@@ -175,23 +180,40 @@ enum ICMPPing {
         return packet
     }
 
-    private nonisolated static func parseEchoReply(
+    /// macOS (and other BSDs) often deliver `recv` buffers as **IPv4 header + ICMP**; Linux typically delivers ICMP only.
+    internal nonisolated static func icmpStartOffset(in data: Data) -> Int {
+        guard data.count >= 20 else { return 0 }
+        let version = data[0] >> 4
+        guard version == 4 else { return 0 }
+        let headerLen = Int(data[0] & 0x0f) * 4
+        guard headerLen >= 20, headerLen <= data.count else { return 0 }
+        // IPv4 protocol field: 1 = ICMP
+        guard data[9] == 1 else { return 0 }
+        return headerLen
+    }
+
+    internal nonisolated static func parseEchoReply(
         data: Data,
         expectedIdentifier: UInt16,
         expectedSequence: UInt16,
         sentNanos: UInt64
     ) -> Double? {
-        guard data.count >= 16 else { return nil }
-        let type = data[0]
+        let icmpOffset = icmpStartOffset(in: data)
+        guard data.count >= icmpOffset + 16 else { return nil }
+
+        let type = data[icmpOffset]
         guard type == echoReplyType else { return nil }
 
-        let identifier = UInt16(bigEndian: data.withUnsafeBytes { $0.load(fromByteOffset: 4, as: UInt16.self) })
-        let sequence = UInt16(bigEndian: data.withUnsafeBytes { $0.load(fromByteOffset: 6, as: UInt16.self) })
+        let idOffset = icmpOffset + 4
+        let seqOffset = icmpOffset + 6
+        let payloadOffset = icmpOffset + 8
+
+        let identifier = UInt16(bigEndian: data.withUnsafeBytes { $0.load(fromByteOffset: idOffset, as: UInt16.self) })
+        let sequence = UInt16(bigEndian: data.withUnsafeBytes { $0.load(fromByteOffset: seqOffset, as: UInt16.self) })
         guard identifier == expectedIdentifier, sequence == expectedSequence else {
             return nil
         }
-        guard data.count >= 16 else { return nil }
-        let echoed = readUInt64BigEndian(data, offset: 8)
+        let echoed = readUInt64BigEndian(data, offset: payloadOffset)
         guard echoed == sentNanos else { return nil }
 
         let now = DispatchTime.now().uptimeNanoseconds

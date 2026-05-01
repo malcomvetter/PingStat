@@ -69,6 +69,8 @@ struct DNSCheckStatus: Codable, Equatable {
     var fallbackServers: [String] = []
     var resolvedIPs: [String] = []
     var timedOutServers: [String] = []
+    /// Per fallback nameserver (e.g. 1.1.1.1): UDP DNS probe to `captive.apple.com` succeeded.
+    var fallbackAnsweredByServer: [String: Bool] = [:]
 }
 
 struct NetworkContext: Codable, Equatable {

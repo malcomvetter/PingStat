@@ -1,0 +1,30 @@
+# Builds a Release archive and uploads PingStat-*.zip when you push a version tag (e.g. v1.0.0).
+# Attach the artifact to a GitHub Release, or download from the Actions run summary.
+name: Release build
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release (ad-hoc; no Apple secrets)
+        env:
+          PINGSTAT_ADHOC_SIGN: "1"
+        run: bash scripts/build-release.sh
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PingStat-macos-zip
+          path: dist/*.zip
+          if-no-files-found: error
