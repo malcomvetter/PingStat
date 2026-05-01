@@ -54,7 +54,7 @@ final class LoggingService {
     private var cachedLoggers: [LogCategory: Logger] = [:]
 
     init(
-        subsystem: String = "com.example.MacNetStatus",
+        subsystem: String = "com.example.PingStat",
         ringBuffer: LogRingBuffer = LogRingBuffer()
     ) {
         self.subsystem = subsystem

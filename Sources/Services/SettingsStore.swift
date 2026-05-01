@@ -10,22 +10,28 @@ final class SettingsStore: ObservableObject {
     }
 
     private let defaults: UserDefaults
-    private let key = "MacNetStatus.AppConfig"
+    private let key = "PingStat.AppConfig"
+    private static let legacyDefaultsKey = "MacNetStatus.AppConfig"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if
-            let data = defaults.data(forKey: key),
-            let decoded = try? JSONDecoder().decode(AppConfig.self, from: data)
-        {
+        if let data = defaults.data(forKey: key),
+           let decoded = try? JSONDecoder().decode(AppConfig.self, from: data) {
             config = decoded
+        } else if let data = defaults.data(forKey: Self.legacyDefaultsKey),
+                  let decoded = try? JSONDecoder().decode(AppConfig.self, from: data) {
+            config = decoded
+            defaults.removeObject(forKey: Self.legacyDefaultsKey)
+            if let encoded = try? JSONEncoder().encode(config) {
+                defaults.set(encoded, forKey: key)
+            }
         } else {
-            config = .default
+            config = .defaults
         }
     }
 
     func resetDefaults() {
-        config = .default
+        config = .defaults
     }
 
     private func persist() {

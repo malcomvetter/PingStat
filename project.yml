@@ -1,4 +1,4 @@
-name: MacNetStatus
+name: PingStat
 options:
   bundleIdPrefix: com.example
 settings:
@@ -6,37 +6,39 @@ settings:
     SWIFT_VERSION: 5.10
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     GENERATE_INFOPLIST_FILE: YES
-    PRODUCT_BUNDLE_IDENTIFIER: com.example.MacNetStatus
 targets:
-  MacNetStatus:
+  PingStat:
     type: application
     platform: macOS
     sources:
       - path: Sources
     settings:
       base:
-        PRODUCT_NAME: MacNetStatus
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.PingStat
+        PRODUCT_NAME: PingStat
+        PRODUCT_MODULE_NAME: PingStat
+        INFOPLIST_KEY_CFBundleDisplayName: PingStat
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         INFOPLIST_KEY_LSUIElement: YES
         CODE_SIGN_STYLE: Automatic
     dependencies: []
-  MacNetStatusTests:
+  PingStatTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - path: Tests
     dependencies:
-      - target: MacNetStatus
+      - target: PingStat
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.MacNetStatusTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.PingStatTests
 schemes:
-  MacNetStatus:
+  PingStat:
     build:
       targets:
-        MacNetStatus: all
-        MacNetStatusTests: [test]
+        PingStat: all
+        PingStatTests: [test]
     test:
       targets:
-        - MacNetStatusTests
+        - PingStatTests

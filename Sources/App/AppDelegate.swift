@@ -4,12 +4,17 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
-    private let container = AppContainer.shared
+    private var viewModel: NetworkMonitorViewModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let viewModel = container.viewModel
+        let viewModel = NetworkMonitorViewModel(settingsStore: SettingsStore())
+        self.viewModel = viewModel
         statusItemController = StatusItemController(viewModel: viewModel)
         statusItemController?.setup()
         viewModel.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        viewModel?.stop()
     }
 }
