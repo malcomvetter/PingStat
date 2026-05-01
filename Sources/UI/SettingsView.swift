@@ -4,7 +4,11 @@ struct SettingsView: View {
     @ObservedObject var viewModel: NetworkMonitorViewModel
 
     var body: some View {
-        Form {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(AppBranding.productName)
+                .font(.title2.weight(.semibold))
+
+            Form {
             Section("Intervals") {
                 LabeledContent("Ping interval (s)") {
                     TextField(
@@ -12,6 +16,7 @@ struct SettingsView: View {
                         value: binding(\.pingIntervalSeconds),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
                 LabeledContent("DNS interval (s)") {
@@ -20,6 +25,7 @@ struct SettingsView: View {
                         value: binding(\.dnsIntervalSeconds),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
                 LabeledContent("Timeout (ms)") {
@@ -28,6 +34,7 @@ struct SettingsView: View {
                         value: intBinding(\.pingTimeoutMs),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
             }
@@ -39,6 +46,7 @@ struct SettingsView: View {
                         value: binding(\.degradedThresholdMs),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
                 LabeledContent("Healthy if WAN mean <=") {
@@ -47,6 +55,7 @@ struct SettingsView: View {
                         value: binding(\.healthyThresholdMs),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
                 LabeledContent("Blazing gateway <") {
@@ -55,6 +64,7 @@ struct SettingsView: View {
                         value: binding(\.blazingGatewayThresholdMs),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
                 LabeledContent("Blazing WAN <") {
@@ -63,6 +73,7 @@ struct SettingsView: View {
                         value: binding(\.blazingWanThresholdMs),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
             }
@@ -74,6 +85,7 @@ struct SettingsView: View {
                         value: intBinding(\.antiFlapEnterCount),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
                 LabeledContent("Recover count") {
@@ -82,6 +94,7 @@ struct SettingsView: View {
                         value: intBinding(\.antiFlapRecoverCount),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
                 LabeledContent("Min dwell (s)") {
@@ -90,6 +103,7 @@ struct SettingsView: View {
                         value: binding(\.minimumStateDwellSeconds),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
                 LabeledContent("Notification cooldown (s)") {
@@ -98,6 +112,7 @@ struct SettingsView: View {
                         value: binding(\.notificationCooldownSeconds),
                         format: .number
                     )
+                    .labelsHidden()
                     .frame(width: 80)
                 }
             }
@@ -118,8 +133,9 @@ struct SettingsView: View {
             Button("Reset defaults") {
                 viewModel.settingsStore.resetDefaults()
             }
+            }
+            .formStyle(.grouped)
         }
-        .formStyle(.grouped)
         .padding(12)
         .frame(width: 520, height: 520)
     }

@@ -2,13 +2,14 @@ import Foundation
 import UserNotifications
 
 @MainActor
-final class NotificationService {
+final class NotificationService: NSObject {
     private let center = UNUserNotificationCenter.current()
     private let logger: LoggingService
     private var lastSentAtByKey: [String: Date] = [:]
 
     init(logger: LoggingService) {
         self.logger = logger
+        super.init()
         center.delegate = self
     }
 
@@ -71,6 +72,7 @@ final class NotificationService {
     }
 }
 
+@MainActor
 extension NotificationService: UNUserNotificationCenterDelegate {
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,

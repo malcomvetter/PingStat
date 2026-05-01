@@ -30,7 +30,7 @@ final class DebugExportService {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         let timestamp = formatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")
-        let fileURL = directoryURL.appendingPathComponent("MacNetStatus-debug-\(timestamp).json")
+        let fileURL = directoryURL.appendingPathComponent("\(AppBranding.productName)-debug-\(timestamp).json")
         try data.write(to: fileURL, options: .atomic)
         logger.log(.notice, category: .ui, "Debug export created at \(fileURL.path)")
         return fileURL

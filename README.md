@@ -1,4 +1,4 @@
-# MacNetStatus
+# PingStat
 
 Menu bar macOS app that monitors gateway/WAN latency and DNS behavior with
 offline/degraded/healthy/blazing states.
@@ -17,11 +17,13 @@ sudo xcodebuild -runFirstLaunch
 sudo xcodebuild -license accept
 ```
 
-3. Bootstrap dependencies and generate project:
+3. Bootstrap dependencies and generate the Xcode project (`PingStat.xcodeproj`):
 
 ```bash
 ./scripts/bootstrap.sh
 ```
+
+If an older `MacNetStatus.xcodeproj` is still present, delete it so Xcode and `xcodebuild` do not open the wrong project.
 
 4. Build:
 
@@ -35,13 +37,17 @@ sudo xcodebuild -license accept
 ./scripts/test.sh
 ```
 
-Both scripts regenerate the Xcode project from `project.yml` before running so
-local generated files do not drift from source.
+6. Build and launch the debug app:
+
+```bash
+./scripts/launch-debug.sh
+```
+
+Both `build.sh` and `test.sh` regenerate the Xcode project from `project.yml` before running so local generated files do not drift from source.
 
 ## Troubleshooting
 
-If you see `Build input file cannot be found ... AppContainer.swift` (or similar
-missing source file errors), your local generated project is stale. Regenerate:
+If you see `Build input file cannot be found ... AppContainer.swift` (or similar missing source file errors), your local generated project is stale. Regenerate:
 
 ```bash
 xcodegen generate

@@ -34,7 +34,7 @@ final class NetworkMonitorViewModel: ObservableObject {
     private var previousDNSFiltering = false
 
     init(
-        settingsStore: SettingsStore = SettingsStore(),
+        settingsStore: SettingsStore,
         commandRunner: CommandRunner = CommandRunner(),
         logging: LoggingService = LoggingService()
     ) {
@@ -46,12 +46,10 @@ final class NetworkMonitorViewModel: ObservableObject {
             debugEnabledProvider: { settingsStore.config.debugLoggingEnabled }
         )
         self.pingService = PingService(
-            commandRunner: commandRunner,
             logger: logging,
             debugEnabledProvider: { settingsStore.config.debugLoggingEnabled }
         )
         self.dnsService = DNSService(
-            commandRunner: commandRunner,
             logger: logging,
             debugEnabledProvider: { settingsStore.config.debugLoggingEnabled }
         )
@@ -121,6 +119,7 @@ final class NetworkMonitorViewModel: ObservableObject {
                 if oldGateway != newContext.gatewayIP {
                     self.rebuildEndpoints()
                 }
+                self.evaluateHealth()
             }
             .store(in: &cancellables)
 

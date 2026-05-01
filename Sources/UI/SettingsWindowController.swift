@@ -7,7 +7,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
 
-    private init() {}
+    private override init() {
+        super.init()
+    }
 
     func show(viewModel: NetworkMonitorViewModel) {
         if let window {
@@ -22,7 +24,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "MacNetStatus Settings"
+        window.title = AppBranding.settingsWindowTitle
         window.center()
         window.contentView = NSHostingView(rootView: SettingsView(viewModel: viewModel))
         window.isReleasedWhenClosed = false

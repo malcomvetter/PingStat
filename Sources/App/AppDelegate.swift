@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewModel: NetworkMonitorViewModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let viewModel = NetworkMonitorViewModel()
+        let viewModel = NetworkMonitorViewModel(settingsStore: SettingsStore())
         self.viewModel = viewModel
         statusItemController = StatusItemController(viewModel: viewModel)
         statusItemController?.setup()

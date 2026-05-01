@@ -1,8 +1,8 @@
 import XCTest
-@testable import MacNetStatus
+@testable import PingStat
 
 @MainActor
-final class MacNetStatusTests: XCTestCase {
+final class PingStatTests: XCTestCase {
     func testHealthEvaluatorMarksOfflineWhenNoConnectivity() {
         let evaluator = HealthEvaluator()
         let input = HealthEvaluationInput(
@@ -85,6 +85,34 @@ final class MacNetStatusTests: XCTestCase {
         var dns = DNSCheckStatus()
         dns.allConfiguredTimedOut = true
         dns.fallbackWorked = true
+        let now = Date()
+        let gateway = EndpointStatus(
+            id: "gateway",
+            label: "Gateway",
+            host: "192.168.1.1",
+            kind: .gateway,
+            meanLast5Ms: 5,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 5, timedOut: false, message: "ok")
+        )
+        let cloudflare = EndpointStatus(
+            id: "cloudflare",
+            label: "Cloudflare",
+            host: "1.1.1.1",
+            kind: .cloudflare,
+            meanLast5Ms: 50,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 50, timedOut: false, message: "ok")
+        )
+        let google = EndpointStatus(
+            id: "google",
+            label: "Google",
+            host: "8.8.8.8",
+            kind: .google,
+            meanLast5Ms: 55,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 55, timedOut: false, message: "ok")
+        )
         let input = HealthEvaluationInput(
             context: .init(
                 connected: true,
@@ -94,12 +122,18 @@ final class MacNetStatusTests: XCTestCase {
                 gatewayIP: "192.168.1.1",
                 dnsServers: ["192.168.1.1"]
             ),
-            endpointStatuses: [:],
+            endpointStatuses: [
+                .gateway: gateway,
+                .cloudflare: cloudflare,
+                .google: google
+            ],
             dnsStatus: dns,
             config: .defaults
         )
 
-        _ = evaluator.evaluate(input)
+        for _ in 0 ..< 4 {
+            _ = evaluator.evaluate(input)
+        }
         let snapshot = evaluator.evaluate(input)
 
         XCTAssertEqual(snapshot.state, .degraded)

@@ -28,12 +28,17 @@ struct StatusPopoverView: View {
     }
 
     private var header: some View {
-        HStack {
-            Label(
-                "Network \(viewModel.snapshot.state.title)",
-                systemImage: viewModel.snapshot.state.systemImageName
-            )
-            .foregroundColor(viewModel.latestStateColor(for: viewModel.snapshot.state))
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AppBranding.productName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Label(
+                    "Network \(viewModel.snapshot.state.title)",
+                    systemImage: viewModel.snapshot.state.systemImageName
+                )
+                .foregroundColor(viewModel.latestStateColor(for: viewModel.snapshot.state))
+            }
             Spacer()
             Button("Settings") {
                 SettingsWindowController.shared.show(viewModel: viewModel)
@@ -88,8 +93,15 @@ struct StatusPopoverView: View {
     private var interfaceSubtitle: String {
         let name = viewModel.context.interfaceName ?? "Unknown"
         let type = viewModel.context.interfaceType ?? "Unknown"
-        let ip = viewModel.context.localIP ?? "--"
-        return "\(name) (\(type)) • \(ip)"
+        let ipPart: String
+        if let ip = viewModel.context.localIP, !ip.isEmpty {
+            ipPart = ip
+        } else if viewModel.context.interfaceName != nil {
+            ipPart = "No IPv4"
+        } else {
+            ipPart = "—"
+        }
+        return "\(name) (\(type)) • \(ipPart)"
     }
 
     private func endpointRow(_ endpoint: EndpointStatus) -> some View {

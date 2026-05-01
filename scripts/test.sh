@@ -15,7 +15,8 @@ fi
 xcodegen generate >/dev/null
 
 xcodebuild \
-  -scheme MacNetStatus \
+  -project PingStat.xcodeproj \
+  -scheme PingStat \
   -destination "platform=macOS" \
   -derivedDataPath .build/DerivedData \
   test

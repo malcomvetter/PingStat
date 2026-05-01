@@ -5,16 +5,15 @@ struct DNSCheckResult {
 }
 
 final class DNSService {
-    private let commandRunner: CommandRunner
+    private static let probeHostname = "captive.apple.com"
+
     private let logger: LoggingService
     private let debugEnabledProvider: () -> Bool
 
     init(
-        commandRunner: CommandRunner,
         logger: LoggingService,
         debugEnabledProvider: @escaping () -> Bool
     ) {
-        self.commandRunner = commandRunner
         self.logger = logger
         self.debugEnabledProvider = debugEnabledProvider
     }
@@ -110,25 +109,17 @@ final class DNSService {
     }
 
     private func resolve(server: String, timeoutMs: Int) async -> ServerResolution {
-        do {
-            let timeoutSeconds = max(1, Int(ceil(Double(timeoutMs) / 1_000)))
-            let result = try await commandRunner.run(
-                launchPath: "/usr/bin/dig",
-                arguments: ["+time=\(timeoutSeconds)", "+tries=1", "@\(server)", "captive.apple.com", "A", "+short"],
-                timeoutMs: UInt64(timeoutMs + 200)
-            )
-            let ips = result.output
-                .split(separator: "\n")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { Self.isIPv4($0) }
-            return ServerResolution(
-                server: server,
-                success: !ips.isEmpty,
-                ips: ips
-            )
-        } catch {
-            return ServerResolution(server: server, success: false, ips: [])
-        }
+        let ips = await DNSUDPQuery.resolveIPv4A(
+            hostname: Self.probeHostname,
+            nameserverIPv4: server,
+            timeoutMs: timeoutMs
+        )
+        let filtered = ips.filter { Self.isIPv4($0) }
+        return ServerResolution(
+            server: server,
+            success: !filtered.isEmpty,
+            ips: filtered
+        )
     }
 
     private static func isIPv4(_ value: String) -> Bool {
