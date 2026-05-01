@@ -1,3 +1,4 @@
+import Darwin
 import XCTest
 @testable import PingStat
 
@@ -137,5 +138,95 @@ final class PingStatTests: XCTestCase {
         let snapshot = evaluator.evaluate(input)
 
         XCTAssertEqual(snapshot.state, .degraded)
+    }
+
+    func testCollectNameserversFromScutilKeepsFullIPv6Literal() {
+        let sample = """
+        resolver #1
+          nameserver[0] : 2001:4860:4860::8888
+          nameserver[1] : 8.8.8.8
+        """
+        let servers = NetworkContextService.collectNameserversInOrder(from: sample)
+        XCTAssertEqual(servers, ["2001:4860:4860::8888", "8.8.8.8"])
+    }
+
+    func testCollectNameserversAddsNumericZoneFromIfIndexForLinkLocalIPv6() {
+        let sample = """
+        resolver #1
+          nameserver[0] : fe80::783f:4dff:feea:ad64
+          if_index : 14 (en0)
+        resolver #2
+          nameserver[0] : 8.8.8.8
+        """
+        let servers = NetworkContextService.collectNameserversInOrder(from: sample)
+        XCTAssertEqual(servers.count, 2)
+        XCTAssertEqual(servers[0], "fe80::783f:4dff:feea:ad64%14")
+        XCTAssertEqual(servers[1], "8.8.8.8")
+    }
+
+    func testCollectNameserversIfIndexBeforeNameserverStillScopesLinkLocal() {
+        let sample = """
+        resolver #1
+          if_index : 3 (lo0)
+          nameserver[0] : fe80::1
+        """
+        let servers = NetworkContextService.collectNameserversInOrder(from: sample)
+        XCTAssertEqual(servers, ["fe80::1%3"])
+    }
+
+    func testICMPEchoReplyParsingSkipsPrependedIPv4Header() {
+        let sentNanos: UInt64 = 0x1234_5678_90AB_CDEF
+        let identifier: UInt16 = 0xABCD
+        let sequence: UInt16 = 42
+
+        var icmp = Data()
+        icmp.append(0)
+        icmp.append(0)
+        icmp.append(contentsOf: [0, 0])
+        var idBE = identifier.bigEndian
+        icmp.append(contentsOf: withUnsafeBytes(of: &idBE) { Data($0) })
+        var seqBE = sequence.bigEndian
+        icmp.append(contentsOf: withUnsafeBytes(of: &seqBE) { Data($0) })
+        var nanoBE = sentNanos.bigEndian
+        icmp.append(contentsOf: withUnsafeBytes(of: &nanoBE) { Data($0) })
+
+        XCTAssertNotNil(
+            ICMPPing.parseEchoReply(
+                data: icmp,
+                expectedIdentifier: identifier,
+                expectedSequence: sequence,
+                sentNanos: sentNanos
+            )
+        )
+
+        var withIPv4 = Data(count: 20)
+        withIPv4[0] = 0x45
+        withIPv4[9] = 1
+        withIPv4.append(icmp)
+
+        XCTAssertEqual(ICMPPing.icmpStartOffset(in: withIPv4), 20)
+        XCTAssertNotNil(
+            ICMPPing.parseEchoReply(
+                data: withIPv4,
+                expectedIdentifier: identifier,
+                expectedSequence: sequence,
+                sentNanos: sentNanos
+            )
+        )
+    }
+
+    func testParseIPv6NameserverLinkLocalScope() {
+        let global = DNSUDPQuery.parseIPv6Nameserver("2001:db8::1")
+        XCTAssertEqual(global?.address, "2001:db8::1")
+        XCTAssertEqual(global?.scopeId, 0)
+
+        let lo = "lo0".withCString { if_nametoindex($0) }
+        guard lo > 0 else {
+            XCTSkip("lo0 not available")
+            return
+        }
+        let scoped = DNSUDPQuery.parseIPv6Nameserver("fe80::1%lo0")
+        XCTAssertEqual(scoped?.address, "fe80::1")
+        XCTAssertEqual(scoped?.scopeId, lo)
     }
 }

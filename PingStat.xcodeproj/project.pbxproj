@@ -1,0 +1,526 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1B067CEC91715642D6D910B1 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1659AE96406BFC6A44FFA3D /* SettingsView.swift */; };
+		1CB51DC3ABC4DDA6736216D4 /* DNSUDPQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */; };
+		237A4EE84D9A068A437F1D20 /* PingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AB7191F31285389A822CB4C /* PingService.swift */; };
+		24E7C5B9AB6DD2F7B8946ADA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EC8C7B63BFCA68292C877C /* AppDelegate.swift */; };
+		342E0FD91394B57F2EDF728E /* AppBranding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62533DA3EADB1D3A524886AF /* AppBranding.swift */; };
+		45EEC788693127CBB984774C /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF8C65BB3FD743DF2057DBF /* StatusItemController.swift */; };
+		4B63B514372B865B61FB6874 /* CommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F33E6A736CD0B40FF3953EF /* CommandRunner.swift */; };
+		4D49E6B5943F2ECA2513AB0F /* NetworkContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE9821CF1ADB08D747D80A8 /* NetworkContextService.swift */; };
+		7495C1A251433E7B0CBFCF92 /* LoginItemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */; };
+		7AEA30CF82A9255E10186471 /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087999CA710AC77A26F95E9B /* LoggingService.swift */; };
+		8DB85849D87BE22B68E3E1DF /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F6F1CFFDDC4F3E9E6663C87 /* NotificationService.swift */; };
+		9064A7E1CE53A7F7E840537D /* HealthEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E59F66FFF5BA3D245D93E2 /* HealthEvaluator.swift */; };
+		A3DC855F3FA93B9A72B141F0 /* StatusPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479FE9B23D7273D786A96087 /* StatusPopoverView.swift */; };
+		AB0F18F23A1765BBFD766F1F /* NetworkMonitorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF70C8573F7B6164AFAAD15D /* NetworkMonitorViewModel.swift */; };
+		ADAB9B85F49BADE550D1EDF1 /* DebugExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4733B571641CE69A059B04A8 /* DebugExportService.swift */; };
+		AEFD8E1ECADEF2980DD9AD2C /* ICMPPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D5E7E1250837BE6A66018C /* ICMPPing.swift */; };
+		B5B32EE8F5DCACD1BD719048 /* DNSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70073510CB9A14E301BA63F9 /* DNSService.swift */; };
+		CFB8710E19EF01B583B3F8C4 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0444896208B2068A335E7171 /* SettingsStore.swift */; };
+		D1C40ECFBE4D1A2253B0F744 /* PingStatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7FCE5FA1D79892C3442C57 /* PingStatApp.swift */; };
+		E430ABC98D168E41C260C420 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E778EBA074954763C4D61921 /* NetworkModels.swift */; };
+		EDF3F7D65718B527A0EE26E2 /* PingStatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42C38ED7D8811349CD8EB38D /* PingStatTests.swift */; };
+		F87DBBCA907F0E2C79F0AC7C /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76873EC3FE57B386B3BC9D81 /* AppConfig.swift */; };
+		FCE84EE4C9FF2EE3144D099F /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 977DCB59E911BDE414C16FDD /* SettingsWindowController.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A8C52D6DD2401A44037D70EF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 416582A41CCA3A441331CD26 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C05AC9FB2A07397A2B00F3A4;
+			remoteInfo = PingStat;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0444896208B2068A335E7171 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		087999CA710AC77A26F95E9B /* LoggingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingService.swift; sourceTree = "<group>"; };
+		1AB7191F31285389A822CB4C /* PingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingService.swift; sourceTree = "<group>"; };
+		308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemService.swift; sourceTree = "<group>"; };
+		37E59F66FFF5BA3D245D93E2 /* HealthEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthEvaluator.swift; sourceTree = "<group>"; };
+		3E74D92F746BEF37958304F8 /* PingStatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PingStatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F6F1CFFDDC4F3E9E6663C87 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		42C38ED7D8811349CD8EB38D /* PingStatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingStatTests.swift; sourceTree = "<group>"; };
+		4733B571641CE69A059B04A8 /* DebugExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugExportService.swift; sourceTree = "<group>"; };
+		479FE9B23D7273D786A96087 /* StatusPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusPopoverView.swift; sourceTree = "<group>"; };
+		5F33E6A736CD0B40FF3953EF /* CommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunner.swift; sourceTree = "<group>"; };
+		62533DA3EADB1D3A524886AF /* AppBranding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBranding.swift; sourceTree = "<group>"; };
+		70073510CB9A14E301BA63F9 /* DNSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSService.swift; sourceTree = "<group>"; };
+		74D5E7E1250837BE6A66018C /* ICMPPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICMPPing.swift; sourceTree = "<group>"; };
+		76873EC3FE57B386B3BC9D81 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		796AA9EB01C60F878051F32A /* PingStat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PingStat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		977DCB59E911BDE414C16FDD /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
+		A1659AE96406BFC6A44FFA3D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSUDPQuery.swift; sourceTree = "<group>"; };
+		BF70C8573F7B6164AFAAD15D /* NetworkMonitorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitorViewModel.swift; sourceTree = "<group>"; };
+		C6EC8C7B63BFCA68292C877C /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		E778EBA074954763C4D61921 /* NetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkModels.swift; sourceTree = "<group>"; };
+		ECF8C65BB3FD743DF2057DBF /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
+		EF7FCE5FA1D79892C3442C57 /* PingStatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingStatApp.swift; sourceTree = "<group>"; };
+		FBE9821CF1ADB08D747D80A8 /* NetworkContextService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkContextService.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0D0054A322DCEB2ABB289DFF /* App */ = {
+			isa = PBXGroup;
+			children = (
+				C6EC8C7B63BFCA68292C877C /* AppDelegate.swift */,
+				EF7FCE5FA1D79892C3442C57 /* PingStatApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		30BB3C462B411A4DF27CEA0D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				796AA9EB01C60F878051F32A /* PingStat.app */,
+				3E74D92F746BEF37958304F8 /* PingStatTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5A04189EB5D11A1F27BCB08F /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				0D0054A322DCEB2ABB289DFF /* App */,
+				5CEF2EB33288EF608CD2BD74 /* Model */,
+				D6D8CC1D128866CFB7912098 /* Services */,
+				7AED3E99EA329A4A3DDCF19B /* Support */,
+				6266C9B37AD9E137AF9E2A62 /* UI */,
+				F3A8C3EA3A7305B825D4CAC3 /* ViewModel */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		5BCC50E95F372BB9BC0BDD76 = {
+			isa = PBXGroup;
+			children = (
+				5A04189EB5D11A1F27BCB08F /* Sources */,
+				691DEAFCA3A15E8D41E4C41B /* Tests */,
+				30BB3C462B411A4DF27CEA0D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5CEF2EB33288EF608CD2BD74 /* Model */ = {
+			isa = PBXGroup;
+			children = (
+				76873EC3FE57B386B3BC9D81 /* AppConfig.swift */,
+				E778EBA074954763C4D61921 /* NetworkModels.swift */,
+			);
+			path = Model;
+			sourceTree = "<group>";
+		};
+		6266C9B37AD9E137AF9E2A62 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				A1659AE96406BFC6A44FFA3D /* SettingsView.swift */,
+				977DCB59E911BDE414C16FDD /* SettingsWindowController.swift */,
+				ECF8C65BB3FD743DF2057DBF /* StatusItemController.swift */,
+				479FE9B23D7273D786A96087 /* StatusPopoverView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		691DEAFCA3A15E8D41E4C41B /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				42C38ED7D8811349CD8EB38D /* PingStatTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		7AED3E99EA329A4A3DDCF19B /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				62533DA3EADB1D3A524886AF /* AppBranding.swift */,
+				5F33E6A736CD0B40FF3953EF /* CommandRunner.swift */,
+				BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */,
+				74D5E7E1250837BE6A66018C /* ICMPPing.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		D6D8CC1D128866CFB7912098 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				4733B571641CE69A059B04A8 /* DebugExportService.swift */,
+				70073510CB9A14E301BA63F9 /* DNSService.swift */,
+				37E59F66FFF5BA3D245D93E2 /* HealthEvaluator.swift */,
+				087999CA710AC77A26F95E9B /* LoggingService.swift */,
+				308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */,
+				FBE9821CF1ADB08D747D80A8 /* NetworkContextService.swift */,
+				3F6F1CFFDDC4F3E9E6663C87 /* NotificationService.swift */,
+				1AB7191F31285389A822CB4C /* PingService.swift */,
+				0444896208B2068A335E7171 /* SettingsStore.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		F3A8C3EA3A7305B825D4CAC3 /* ViewModel */ = {
+			isa = PBXGroup;
+			children = (
+				BF70C8573F7B6164AFAAD15D /* NetworkMonitorViewModel.swift */,
+			);
+			path = ViewModel;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		34420CE597A33D3094B1A3F2 /* PingStatTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A278955EEF2639C69D1B536B /* Build configuration list for PBXNativeTarget "PingStatTests" */;
+			buildPhases = (
+				8DEA682409271C5B0A10EE2C /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FBED7E5E09019E76F23FB27E /* PBXTargetDependency */,
+			);
+			name = PingStatTests;
+			packageProductDependencies = (
+			);
+			productName = PingStatTests;
+			productReference = 3E74D92F746BEF37958304F8 /* PingStatTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C05AC9FB2A07397A2B00F3A4 /* PingStat */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 34AB850E9D9DF70CDD6BFA31 /* Build configuration list for PBXNativeTarget "PingStat" */;
+			buildPhases = (
+				6E23128D17E91F6340ED7D3F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PingStat;
+			packageProductDependencies = (
+			);
+			productName = PingStat;
+			productReference = 796AA9EB01C60F878051F32A /* PingStat.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		416582A41CCA3A441331CD26 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					C05AC9FB2A07397A2B00F3A4 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 29C1DC16F3DE33079926F40D /* Build configuration list for PBXProject "PingStat" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5BCC50E95F372BB9BC0BDD76;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 30BB3C462B411A4DF27CEA0D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C05AC9FB2A07397A2B00F3A4 /* PingStat */,
+				34420CE597A33D3094B1A3F2 /* PingStatTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6E23128D17E91F6340ED7D3F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				342E0FD91394B57F2EDF728E /* AppBranding.swift in Sources */,
+				F87DBBCA907F0E2C79F0AC7C /* AppConfig.swift in Sources */,
+				24E7C5B9AB6DD2F7B8946ADA /* AppDelegate.swift in Sources */,
+				4B63B514372B865B61FB6874 /* CommandRunner.swift in Sources */,
+				B5B32EE8F5DCACD1BD719048 /* DNSService.swift in Sources */,
+				1CB51DC3ABC4DDA6736216D4 /* DNSUDPQuery.swift in Sources */,
+				ADAB9B85F49BADE550D1EDF1 /* DebugExportService.swift in Sources */,
+				9064A7E1CE53A7F7E840537D /* HealthEvaluator.swift in Sources */,
+				AEFD8E1ECADEF2980DD9AD2C /* ICMPPing.swift in Sources */,
+				7AEA30CF82A9255E10186471 /* LoggingService.swift in Sources */,
+				7495C1A251433E7B0CBFCF92 /* LoginItemService.swift in Sources */,
+				4D49E6B5943F2ECA2513AB0F /* NetworkContextService.swift in Sources */,
+				E430ABC98D168E41C260C420 /* NetworkModels.swift in Sources */,
+				AB0F18F23A1765BBFD766F1F /* NetworkMonitorViewModel.swift in Sources */,
+				8DB85849D87BE22B68E3E1DF /* NotificationService.swift in Sources */,
+				237A4EE84D9A068A437F1D20 /* PingService.swift in Sources */,
+				D1C40ECFBE4D1A2253B0F744 /* PingStatApp.swift in Sources */,
+				CFB8710E19EF01B583B3F8C4 /* SettingsStore.swift in Sources */,
+				1B067CEC91715642D6D910B1 /* SettingsView.swift in Sources */,
+				FCE84EE4C9FF2EE3144D099F /* SettingsWindowController.swift in Sources */,
+				45EEC788693127CBB984774C /* StatusItemController.swift in Sources */,
+				A3DC855F3FA93B9A72B141F0 /* StatusPopoverView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8DEA682409271C5B0A10EE2C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EDF3F7D65718B527A0EE26E2 /* PingStatTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FBED7E5E09019E76F23FB27E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C05AC9FB2A07397A2B00F3A4 /* PingStat */;
+			targetProxy = A8C52D6DD2401A44037D70EF /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0AA487A0345A5DFD5E3EFAF6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_LSUIElement = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.PingStat;
+				PRODUCT_MODULE_NAME = PingStat;
+				PRODUCT_NAME = PingStat;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		0EE351D71A696E55122E93BA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.PingStatTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PingStat.app/Contents/MacOS/PingStat";
+			};
+			name = Release;
+		};
+		1683A7BE7E781E36FABEC028 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.1;
+			};
+			name = Debug;
+		};
+		6BFB3FC889FB06C29FD6DD07 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_LSUIElement = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.PingStat;
+				PRODUCT_MODULE_NAME = PingStat;
+				PRODUCT_NAME = PingStat;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		82D44119F97ADA1EFBFEB5C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.1;
+			};
+			name = Release;
+		};
+		C8E402F4F20007032ACA9EA8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.PingStatTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PingStat.app/Contents/MacOS/PingStat";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		29C1DC16F3DE33079926F40D /* Build configuration list for PBXProject "PingStat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1683A7BE7E781E36FABEC028 /* Debug */,
+				82D44119F97ADA1EFBFEB5C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		34AB850E9D9DF70CDD6BFA31 /* Build configuration list for PBXNativeTarget "PingStat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0AA487A0345A5DFD5E3EFAF6 /* Debug */,
+				6BFB3FC889FB06C29FD6DD07 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A278955EEF2639C69D1B536B /* Build configuration list for PBXNativeTarget "PingStatTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8E402F4F20007032ACA9EA8 /* Debug */,
+				0EE351D71A696E55122E93BA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 416582A41CCA3A441331CD26 /* Project object */;
+}

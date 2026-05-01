@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Minimal DNS-over-UDP (RFC 1035) A-record query to a specific IPv4 resolver — replaces `dig @server ... +short`.
+/// Minimal DNS-over-UDP (RFC 1035) A-record query to a specific resolver — replaces `dig @server ... +short`.
 enum DNSUDPQuery {
     private static let dnsPort: UInt16 = 53
     private static let typeA: UInt16 = 1
@@ -12,6 +12,51 @@ enum DNSUDPQuery {
         await Task.detached(priority: .utility) {
             (try? resolveSync(hostname: hostname, nameserverIPv4: nameserverIPv4, timeoutMs: timeoutMs)) ?? []
         }.value
+    }
+
+    /// Same A-record query over UDP, to an IPv4 or IPv6 resolver address.
+    static func resolveA(hostname: String, nameserver: String, timeoutMs: Int) async -> [String] {
+        let ns = nameserver.trimmingCharacters(in: .whitespacesAndNewlines)
+        var v4 = sockaddr_in()
+        if ns.withCString({ inet_pton(AF_INET, $0, &v4.sin_addr) }) == 1 {
+            return await resolveIPv4A(hostname: hostname, nameserverIPv4: ns, timeoutMs: timeoutMs)
+        }
+        guard let v6parsed = parseIPv6Nameserver(ns) else {
+            return []
+        }
+        return await Task.detached(priority: .utility) {
+            (try? resolveSyncIPv6(
+                hostname: hostname,
+                nameserver: v6parsed.address,
+                scopeId: v6parsed.scopeId,
+                timeoutMs: timeoutMs
+            )) ?? []
+        }.value
+    }
+
+    /// IPv6 literal plus optional zone (`fe80::1%en0`). **Link-local** (`fe80::/10`) only works on the wire if
+    /// `sin6_scope_id` matches the interface; `%en0` is turned into `if_nametoindex("en0")`.
+    internal nonisolated static func parseIPv6Nameserver(_ raw: String) -> (address: String, scopeId: UInt32)? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let pct = trimmed.firstIndex(of: "%") {
+            let addr = String(trimmed[..<pct])
+            let zone = String(trimmed[trimmed.index(after: pct)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !addr.isEmpty else { return nil }
+            var a6 = in6_addr()
+            guard addr.withCString({ inet_pton(AF_INET6, $0, &a6) }) == 1 else { return nil }
+            if zone.isEmpty {
+                return (addr, 0)
+            }
+            if let numeric = UInt32(zone), numeric > 0 {
+                return (addr, numeric)
+            }
+            let idx = zone.withCString { if_nametoindex($0) }
+            return idx > 0 ? (addr, idx) : (addr, 0)
+        }
+        var a6 = in6_addr()
+        guard trimmed.withCString({ inet_pton(AF_INET6, $0, &a6) }) == 1 else { return nil }
+        return (trimmed, 0)
     }
 
     private nonisolated static func resolveSync(
@@ -36,6 +81,73 @@ enum DNSUDPQuery {
         defer { close(fd) }
 
         let peerLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let sent = payload.withUnsafeBytes { raw -> ssize_t in
+            guard let base = raw.baseAddress else { return -1 }
+            return withUnsafePointer(to: &peer) { ptr in
+                ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                    sendto(fd, base, payload.count, 0, sa, peerLen)
+                }
+            }
+        }
+        guard sent == ssize_t(payload.count) else {
+            throw DNSUDPError.sendFailed(errno)
+        }
+
+        let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(max(1, timeoutMs)) * 1_000_000
+        var buffer = [UInt8](repeating: 0, count: 65_536)
+
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            let remainingNs = deadline - DispatchTime.now().uptimeNanoseconds
+            if remainingNs <= 0 { break }
+            let sliceMs = max(1, min(Int(remainingNs / 1_000_000), Int(UInt16.max)))
+            try setReceiveTimeout(fd: fd, timeoutMs: sliceMs)
+
+            let recvLen = buffer.withUnsafeMutableBytes { raw -> ssize_t in
+                guard let base = raw.baseAddress else { return -1 }
+                return recvfrom(fd, base, raw.count, 0, nil, nil)
+            }
+
+            if recvLen < 0 {
+                let err = errno
+                if err == EAGAIN || err == EWOULDBLOCK {
+                    continue
+                }
+                throw DNSUDPError.recvFailed(err)
+            }
+
+            let data = Data(buffer.prefix(Int(recvLen)))
+            if let ips = parseResponse(data: data, expectedID: queryID) {
+                return ips
+            }
+        }
+
+        return []
+    }
+
+    private nonisolated static func resolveSyncIPv6(
+        hostname: String,
+        nameserver: String,
+        scopeId: UInt32,
+        timeoutMs: Int
+    ) throws -> [String] {
+        let queryID = UInt16.random(in: .min ... .max)
+        let payload = try buildQuery(hostname: hostname, queryID: queryID)
+
+        var peer = sockaddr_in6()
+        peer.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
+        peer.sin6_family = sa_family_t(AF_INET6)
+        peer.sin6_port = in_port_t(UInt16(dnsPort).bigEndian)
+        peer.sin6_scope_id = scopeId
+        let pton = nameserver.withCString { inet_pton(AF_INET6, $0, &peer.sin6_addr) }
+        guard pton == 1 else {
+            throw DNSUDPError.invalidNameserver
+        }
+
+        let fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP)
+        guard fd >= 0 else { throw DNSUDPError.socketFailed(errno) }
+        defer { close(fd) }
+
+        let peerLen = socklen_t(MemoryLayout<sockaddr_in6>.size)
         let sent = payload.withUnsafeBytes { raw -> ssize_t in
             guard let base = raw.baseAddress else { return -1 }
             return withUnsafePointer(to: &peer) { ptr in

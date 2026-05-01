@@ -29,18 +29,37 @@ final class DNSService {
         status.configuredServers = configured
         status.fallbackServers = fallbackServers
 
-        if configured.isEmpty {
-            status.allConfiguredTimedOut = true
-            status.fallbackWorked = false
-            return await runFallback(status: status, fallbackServers: fallbackServers, timeoutMs: timeoutMs)
-        }
-
-        let configuredResponses = await resolveAcrossServers(
-            servers: configured,
+        async let fallbackResponsesTask = resolveAcrossServers(
+            servers: fallbackServers,
             timeoutMs: timeoutMs
         )
 
-        let configuredSuccesses = configuredResponses.filter { $0.success }
+        if configured.isEmpty {
+            let fallbackResponses = await fallbackResponsesTask
+            Self.applyFallbackAnswerMap(&status, responses: fallbackResponses)
+            status.allConfiguredTimedOut = true
+            let fallbackSuccesses = fallbackResponses.filter(\.success)
+            status.fallbackWorked = !fallbackSuccesses.isEmpty
+            if status.fallbackWorked {
+                status.resolvedIPs = Array(Set(fallbackSuccesses.flatMap(\.ips))).sorted()
+                status.resolvedPrivateIP = status.resolvedIPs.contains(where: Self.isRFC1918)
+            }
+            logger.debug(
+                .dns,
+                "DNS check (no configured) fallback=\(status.fallbackWorked) ips=\(status.resolvedIPs.joined(separator: ","))",
+                enabled: debugEnabledProvider()
+            )
+            return DNSCheckResult(status: status)
+        }
+
+        async let configuredResponsesTask = resolveAcrossServers(
+            servers: configured,
+            timeoutMs: timeoutMs
+        )
+        let (configuredResponses, fallbackResponses) = await (configuredResponsesTask, fallbackResponsesTask)
+        Self.applyFallbackAnswerMap(&status, responses: fallbackResponses)
+
+        let configuredSuccesses = configuredResponses.filter(\.success)
         let configuredTimeouts = configuredResponses.filter { !$0.success }.map(\.server)
         status.timedOutServers = configuredTimeouts
         status.allConfiguredTimedOut = configuredSuccesses.isEmpty
@@ -52,7 +71,12 @@ final class DNSService {
             let cloudflareGoogle = Set(fallbackServers)
             let shouldFallback = configuredSet.isDisjoint(with: cloudflareGoogle)
             if shouldFallback {
-                return await runFallback(status: status, fallbackServers: fallbackServers, timeoutMs: timeoutMs)
+                let fallbackSuccesses = fallbackResponses.filter(\.success)
+                status.fallbackWorked = !fallbackSuccesses.isEmpty
+                if status.fallbackWorked {
+                    status.resolvedIPs = Array(Set(status.resolvedIPs + fallbackSuccesses.flatMap(\.ips))).sorted()
+                    status.resolvedPrivateIP = status.resolvedIPs.contains(where: Self.isRFC1918)
+                }
             }
         }
 
@@ -65,28 +89,10 @@ final class DNSService {
         return DNSCheckResult(status: status)
     }
 
-    private func runFallback(
-        status: DNSCheckStatus,
-        fallbackServers: [String],
-        timeoutMs: Int
-    ) async -> DNSCheckResult {
-        var status = status
-        let fallbackResponses = await resolveAcrossServers(
-            servers: fallbackServers,
-            timeoutMs: timeoutMs
-        )
-        let fallbackSuccesses = fallbackResponses.filter { $0.success }
-        status.fallbackWorked = !fallbackSuccesses.isEmpty
-        if status.fallbackWorked {
-            status.resolvedIPs = Array(Set(status.resolvedIPs + fallbackSuccesses.flatMap(\.ips))).sorted()
-            status.resolvedPrivateIP = status.resolvedIPs.contains(where: Self.isRFC1918)
+    private static func applyFallbackAnswerMap(_ status: inout DNSCheckStatus, responses: [ServerResolution]) {
+        for r in responses {
+            status.fallbackAnsweredByServer[r.server] = r.success
         }
-        logger.debug(
-            .dns,
-            "DNS fallback worked=\(status.fallbackWorked) ips=\(status.resolvedIPs.joined(separator: ","))",
-            enabled: debugEnabledProvider()
-        )
-        return DNSCheckResult(status: status)
     }
 
     private func resolveAcrossServers(
@@ -109,9 +115,9 @@ final class DNSService {
     }
 
     private func resolve(server: String, timeoutMs: Int) async -> ServerResolution {
-        let ips = await DNSUDPQuery.resolveIPv4A(
+        let ips = await DNSUDPQuery.resolveA(
             hostname: Self.probeHostname,
-            nameserverIPv4: server,
+            nameserver: server,
             timeoutMs: timeoutMs
         )
         let filtered = ips.filter { Self.isIPv4($0) }

@@ -1,0 +1,16 @@
+# Xcode / build
+.build/
+DerivedData/
+*.xcarchive
+*.xcresult
+*.ipa
+*.dSYM.zip
+
+# Distribution output (upload to GitHub Releases; do not commit binaries)
+dist/
+
+# macOS
+.DS_Store
+
+# SwiftPM (if added later)
+.swiftpm/
