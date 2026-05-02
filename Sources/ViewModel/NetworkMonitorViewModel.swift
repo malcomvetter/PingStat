@@ -11,8 +11,8 @@ final class NetworkMonitorViewModel: ObservableObject {
     @Published private(set) var context: NetworkContext = .empty
     @Published private(set) var endpoints: [EndpointStatus] = []
     @Published private(set) var dnsStatus = DNSCheckStatus()
-    /// One-line summaries of the last DNS probe runs (newest last), max 2, for the endpoint detail UI.
-    @Published private(set) var dnsProbeHistoryLines: [String] = []
+    /// Last DNS probe detail lines keyed by nameserver address (e.g. `8.8.8.8`), max 2 lines per server, for endpoint detail.
+    @Published private(set) var dnsProbeHistoryByNameserver: [String: [String]] = [:]
     @Published private(set) var snapshot = HealthSnapshot(
         state: .offline,
         reason: "Initializing",
@@ -49,13 +49,11 @@ final class NetworkMonitorViewModel: ObservableObject {
 
     init(
         settingsStore: SettingsStore,
-        commandRunner: CommandRunner = CommandRunner(),
         logging: LoggingService = LoggingService()
     ) {
         self.settingsStore = settingsStore
         self.logging = logging
         self.networkContextService = NetworkContextService(
-            commandRunner: commandRunner,
             logger: logging,
             debugEnabledProvider: { settingsStore.config.debugLoggingEnabled }
         )
@@ -105,6 +103,9 @@ final class NetworkMonitorViewModel: ObservableObject {
         statusIconGracePeriodTask = nil
         pingLoopTask?.cancel()
         dnsLoopTask?.cancel()
+        pingLoopTask = nil
+        dnsLoopTask = nil
+        networkContextService.stop()
         if let powerModeObserver {
             NotificationCenter.default.removeObserver(powerModeObserver)
             self.powerModeObserver = nil
@@ -127,6 +128,29 @@ final class NetworkMonitorViewModel: ObservableObject {
     func meanText(for endpoint: EndpointStatus) -> String {
         guard let mean = endpoint.meanLast5Ms else { return "--" }
         return "\(Int(mean.rounded())) ms"
+    }
+
+    /// DNS UDP probe log lines: WAN/custom use this endpoint’s nameserver only (max 2). Local network lists each resolver IP in order, up to 2 lines per server.
+    func dnsProbeLogLines(for endpoint: EndpointStatus) -> [String] {
+        if endpoint.kind == .gateway {
+            var keys: [String] = []
+            var seen = Set<String>()
+            let keySources =
+                context.dnsServers.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                + [endpoint.host.trimmingCharacters(in: .whitespacesAndNewlines)]
+            for s in keySources {
+                guard !s.isEmpty, !seen.contains(s) else { continue }
+                seen.insert(s)
+                keys.append(s)
+            }
+            var combined: [String] = []
+            for k in keys {
+                combined.append(contentsOf: dnsProbeHistoryByNameserver[k] ?? [])
+            }
+            return combined
+        }
+        let k = endpoint.host.trimmingCharacters(in: .whitespacesAndNewlines)
+        return dnsProbeHistoryByNameserver[k] ?? []
     }
 
     func latestStateColor(for state: NetworkHealthState, colorScheme: ColorScheme) -> Color {
@@ -159,8 +183,15 @@ final class NetworkMonitorViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newContext in
                 guard let self else { return }
+                let hadConnectivity = self.context.connected
                 let oldGateway = self.context.gatewayIP
                 self.context = newContext
+                if hadConnectivity, !newContext.connected {
+                    self.endpoints = OfflineProbeDisplayPolicy.probeHistoryClearedEndpoints(self.endpoints)
+                    self.dnsStatus = DNSCheckStatus()
+                    self.dnsProbeHistoryByNameserver = [:]
+                    self.previousDNSFiltering = false
+                }
                 if oldGateway != newContext.gatewayIP {
                     self.rebuildEndpoints()
                 }
@@ -235,6 +266,9 @@ final class NetworkMonitorViewModel: ObservableObject {
         if endpoints.isEmpty {
             rebuildEndpoints()
         }
+        guard ConnectivityProbePolicy.shouldRunICMPProbes(pathSatisfied: context.connected) else {
+            return
+        }
         let targets = endpoints.map {
             PingTarget(
                 id: $0.id,
@@ -275,12 +309,16 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     private func runDNSTick() async {
+        guard ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: context.connected) else {
+            return
+        }
         let customNameservers: [String] = {
             guard let t = settingsStore.config.customTarget, t.dnsProbesEnabled else { return [] }
             let ip = t.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
             return ip.isEmpty ? [] : [ip]
         }()
         let result = await dnsService.check(
+            probeHostname: settingsStore.config.sanitizedDNSProbeHostname,
             configuredServers: context.dnsServers,
             fallbackServers: settingsStore.config.fallbackDNSServers,
             customNameservers: customNameservers,
@@ -348,56 +386,28 @@ final class NetworkMonitorViewModel: ObservableObject {
                 latest: nil
             ))
         }
-        if settingsStore.config.pingCloudflareEnabled {
+        let wanIdByKind: [EndpointKind: String] = [
+            .cloudflare: "cloudflare",
+            .google: "google",
+            .openDNS: "opendns",
+            .level3: "level3",
+            .quad9: "quad9"
+        ]
+        let wanLabelByKind: [EndpointKind: String] = [
+            .cloudflare: "Cloudflare",
+            .google: "Google",
+            .openDNS: "OpenDNS",
+            .level3: "Level3",
+            .quad9: "Quad9"
+        ]
+        for (kind, host) in settingsStore.config.enabledWanResolverTargets {
+            guard let id = wanIdByKind[kind] else { continue }
+            let label = wanLabelByKind[kind] ?? host
             newEndpoints.append(EndpointStatus(
-                id: "cloudflare",
-                label: "Cloudflare",
-                host: "1.1.1.1",
-                kind: .cloudflare,
-                meanLast5Ms: nil,
-                last10: [],
-                latest: nil
-            ))
-        }
-        if settingsStore.config.pingGoogleEnabled {
-            newEndpoints.append(EndpointStatus(
-                id: "google",
-                label: "Google",
-                host: "8.8.8.8",
-                kind: .google,
-                meanLast5Ms: nil,
-                last10: [],
-                latest: nil
-            ))
-        }
-        if settingsStore.config.pingOpenDNSEnabled {
-            newEndpoints.append(EndpointStatus(
-                id: "opendns",
-                label: "OpenDNS",
-                host: "208.67.220.220",
-                kind: .openDNS,
-                meanLast5Ms: nil,
-                last10: [],
-                latest: nil
-            ))
-        }
-        if settingsStore.config.pingLevel3Enabled {
-            newEndpoints.append(EndpointStatus(
-                id: "level3",
-                label: "Level3",
-                host: "4.2.2.1",
-                kind: .level3,
-                meanLast5Ms: nil,
-                last10: [],
-                latest: nil
-            ))
-        }
-        if settingsStore.config.pingQuad9Enabled {
-            newEndpoints.append(EndpointStatus(
-                id: "quad9",
-                label: "Quad9",
-                host: "9.9.9.9",
-                kind: .quad9,
+                id: id,
+                label: label,
+                host: host,
+                kind: kind,
                 meanLast5Ms: nil,
                 last10: [],
                 latest: nil
@@ -428,38 +438,35 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     private func recordDNSProbeHistory(_ status: DNSCheckStatus) {
-        let line = Self.formatDNSProbeHistoryLine(status: status)
-        var next = dnsProbeHistoryLines
-        next.append(line)
-        if next.count > 2 {
-            next.removeFirst(next.count - 2)
+        let ts = Self.dnsProbeHistoryTimeFormatter.string(from: status.lastCheck ?? Date())
+        guard !status.lastResolverDetailLines.isEmpty else { return }
+        var next = dnsProbeHistoryByNameserver
+        for detail in status.lastResolverDetailLines {
+            guard let key = Self.nameserverKey(fromProbeDetailLine: detail) else { continue }
+            let prefixed = "\(ts) \(detail)"
+            var bucket = next[key] ?? []
+            bucket.append(prefixed)
+            let cap = 2
+            if bucket.count > cap {
+                bucket.removeFirst(bucket.count - cap)
+            }
+            next[key] = bucket
         }
-        dnsProbeHistoryLines = next
+        dnsProbeHistoryByNameserver = next
     }
 
-    private static func formatDNSProbeHistoryLine(status: DNSCheckStatus) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        let ts = formatter.string(from: status.lastCheck ?? Date())
-        var parts: [String] = []
-        if status.configuredServers.isEmpty {
-            parts.append("no system resolvers")
-            parts.append(status.fallbackWorked ? "fallback OK" : "fallback fail")
-        } else {
-            parts.append(status.allConfiguredTimedOut ? "system timed out" : "system OK")
-            if status.allConfiguredTimedOut {
-                parts.append(status.fallbackWorked ? "fallback OK" : "fallback fail")
-            }
+    private static func nameserverKey(fromProbeDetailLine detail: String) -> String? {
+        guard let at = detail.firstIndex(of: "@") else { return nil }
+        let afterAt = detail[detail.index(after: at)...]
+        if let space = afterAt.firstIndex(of: " ") {
+            return String(afterAt[..<space])
         }
-        if status.resolvedPrivateIP {
-            parts.append("private IP answer")
-        }
-        if !status.customNameserverProbes.isEmpty {
-            let summaries = status.customNameserverProbes
-                .map { key, ok in "\(key)=\(ok ? "OK" : "no answer")" }
-                .sorted()
-            parts.append("custom \(summaries.joined(separator: ", "))")
-        }
-        return "\(ts) DNS probe: " + parts.joined(separator: "; ")
+        return String(afterAt).trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    private static let dnsProbeHistoryTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
 }

@@ -130,6 +130,14 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        LabeledContent("DNS Query Target") {
+                            TextField("", text: binding(\.dnsProbeHostname))
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .help(
+                                    "Hostname for A-record probes to each resolver (shown in the endpoint detail DNS log). Default is captive.apple.com."
+                                )
+                        }
                     }
 
                     Section("Thresholds") {
@@ -175,32 +183,29 @@ struct SettingsView: View {
                     }
 
                     Section("Precision") {
-                        LabeledContent("Enter downgrade count") {
+                        LabeledContent("Matching checks before status changes") {
                             TextField(
-                                "Enter count",
-                                value: intBinding(\.antiFlapEnterCount),
+                                "Count",
+                                value: intBinding(\.statusChangeConfirmationCount),
                                 format: .number
                             )
                             .labelsHidden()
                             .frame(width: 80)
+                            .help(
+                                "How many probe rounds in a row must agree before the menu bar status changes (higher = steadier, slower to react)."
+                            )
                         }
-                        LabeledContent("Recover count") {
+                        LabeledContent("Minimum seconds between status changes") {
                             TextField(
-                                "Recover count",
-                                value: intBinding(\.antiFlapRecoverCount),
+                                "Seconds",
+                                value: binding(\.minimumSecondsBetweenStatusChanges),
                                 format: .number
                             )
                             .labelsHidden()
                             .frame(width: 80)
-                        }
-                        LabeledContent("Min dwell (s)") {
-                            TextField(
-                                "Min dwell",
-                                value: binding(\.minimumStateDwellSeconds),
-                                format: .number
+                            .help(
+                                "After the status actually changes, wait at least this long before another change can register (reduces rapid flip-flop)."
                             )
-                            .labelsHidden()
-                            .frame(width: 80)
                         }
                     }
 

@@ -162,38 +162,17 @@ final class StatusItemController: NSObject {
     private func applyStatusBarButton(startupMark: Bool, healthForMark: NetworkHealthState, liveHealthState: NetworkHealthState) {
         guard let button = statusItem.button else { return }
         let axSummary = startupMark ? "Starting up" : liveHealthState.title
-        let image: NSImage?
-        if startupMark {
-            image = Self.templateMarkImage(named: AppBranding.MenuBarMark.startup)
-                ?? NSImage(systemSymbolName: "hourglass", accessibilityDescription: axSummary)
-        } else {
-            let asset = AppBranding.MenuBarMark.healthImageName(for: healthForMark)
-            image = Self.templateMarkImage(named: asset)
-                ?? NSImage(systemSymbolName: Self.filledSystemImageName(for: healthForMark), accessibilityDescription: axSummary)
-        }
-        image?.isTemplate = true
+        let color = HealthAppearance.statusHealthMarkNSColor(startupMark: startupMark, health: healthForMark)
+        let pointSize: CGFloat = 14
+        let baseConfig = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
+        let palette = NSImage.SymbolConfiguration(paletteColors: [color])
+        let combined = baseConfig.applying(palette)
+        let symbolName = HealthAppearance.statusHealthSymbolName(startupMark: startupMark, health: healthForMark)
+        let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: axSummary)
+        let image = base?.withSymbolConfiguration(combined)
+        image?.isTemplate = false
         button.image = image
         button.toolTip = "\(AppBranding.productName) - Network \(liveHealthState.title)"
-    }
-
-    private static func templateMarkImage(named name: String) -> NSImage? {
-        guard let base = NSImage(named: name) else { return nil }
-        let image = (base.copy() as? NSImage) ?? base
-        image.isTemplate = true
-        return image
-    }
-
-    private static func filledSystemImageName(for state: NetworkHealthState) -> String {
-        switch state {
-        case .offline:
-            return "xmark.octagon.fill"
-        case .degraded:
-            return "exclamationmark.triangle.fill"
-        case .healthy:
-            return "checkmark.circle.fill"
-        case .blazing:
-            return "bolt.fill"
-        }
     }
 
     private func addDNSStatusItems(to menu: NSMenu) {

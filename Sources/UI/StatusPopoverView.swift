@@ -41,6 +41,20 @@ struct StatusPopoverView: View {
     @State private var selectedEndpointID: String?
     @Environment(\.colorScheme) private var colorScheme
 
+    private var isShowingEndpointDetail: Bool { selectedEndpointID != nil }
+
+    /// Extra vertical room for the detail `ScrollView` from DNS + ICMP line counts (capped so the popover still fits on screen).
+    private var detailScrollMaxHeightForSelection: CGFloat? {
+        guard let ep = selectedEndpoint else { return nil }
+        let dnsCount = viewModel.dnsProbeLogLines(for: ep).count
+        return Self.detailScrollAreaMaxHeight(dnsLineCount: dnsCount, icmpSampleCount: ep.last10.count)
+    }
+
+    private var popoverDetailContentMaxHeight: CGFloat? {
+        guard let scroll = detailScrollMaxHeightForSelection else { return nil }
+        return min(780, scroll + 155)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
@@ -51,9 +65,12 @@ struct StatusPopoverView: View {
                 summaryList
             }
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.top, isShowingEndpointDetail ? 16 : 12)
+        .padding(.bottom, 16)
         .frame(maxWidth: 400)
-        .fixedSize(horizontal: true, vertical: true)
+        .fixedSize(horizontal: true, vertical: !isShowingEndpointDetail)
+        .frame(maxHeight: isShowingEndpointDetail ? popoverDetailContentMaxHeight : nil, alignment: .top)
         .background(
             PopoverLayoutRefreshTrigger(token: selectedEndpointID ?? "__summary__")
         )
@@ -67,9 +84,16 @@ struct StatusPopoverView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: filledHealthSystemImage(for: viewModel.snapshot.state))
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(viewModel.latestStateColor(for: viewModel.snapshot.state, colorScheme: colorScheme))
+                Image(systemName: HealthAppearance.statusHealthSymbolName(
+                    startupMark: !viewModel.statusBarIconReflectsLiveHealth,
+                    health: viewModel.snapshot.state
+                ))
+                // Match `NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)` on the status item.
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(HealthAppearance.statusHealthMarkColor(
+                    startupMark: !viewModel.statusBarIconReflectsLiveHealth,
+                    health: viewModel.snapshot.state
+                ))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(AppBranding.productName)
                         .font(.title3.weight(.semibold))
@@ -96,19 +120,6 @@ struct StatusPopoverView: View {
         }
     }
 
-    private func filledHealthSystemImage(for state: NetworkHealthState) -> String {
-        switch state {
-        case .offline:
-            return "xmark.octagon.fill"
-        case .degraded:
-            return "exclamationmark.triangle.fill"
-        case .healthy:
-            return "checkmark.circle.fill"
-        case .blazing:
-            return "bolt.fill"
-        }
-    }
-
     private var summaryList: some View {
         summaryListRows
     }
@@ -125,6 +136,11 @@ struct StatusPopoverView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button("Disable \(endpoint.label)") {
+                        disableWanTarget(endpoint.kind)
+                    }
+                }
             }
             ForEach(customEndpointsForSummary) { endpoint in
                 Button {
@@ -135,8 +151,88 @@ struct StatusPopoverView: View {
                 }
                 .buttonStyle(.plain)
             }
+            summaryFooterRow
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Local row always contributes one DNS cell (primary resolver), same as the list above.
+    private var summaryPrimaryDnsIsGreen: Bool {
+        let dns = viewModel.dnsStatus
+        guard dns.lastCheck != nil else { return false }
+        guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else { return false }
+        return !dns.timedOutServers.contains(resolver)
+    }
+
+    private func summaryCustomRowShowsDNS(_ endpoint: EndpointStatus) -> Bool {
+        endpoint.kind == .custom && (viewModel.settingsStore.config.customTarget?.dnsProbesEnabled == true)
+    }
+
+    private var summaryDnsGreenCount: Int {
+        var n = 0
+        if summaryPrimaryDnsIsGreen { n += 1 }
+        for ep in wanEndpointsForSummary where viewModel.dnsStatus.fallbackAnsweredByServer[ep.host] == true {
+            n += 1
+        }
+        for ep in customEndpointsForSummary {
+            guard summaryCustomRowShowsDNS(ep) else { continue }
+            if viewModel.dnsStatus.customNameserverProbes[ep.host] == true { n += 1 }
+        }
+        return n
+    }
+
+    private var summaryDnsTotalCount: Int {
+        var n = 1
+        n += wanEndpointsForSummary.count
+        n += customEndpointsForSummary.filter { summaryCustomRowShowsDNS($0) }.count
+        return n
+    }
+
+    private var summaryMeanPingAcrossActiveMs: Double? {
+        var values: [Double] = []
+        if let gw = gatewayEndpoint, gw.latest?.success == true, let m = gw.meanLast5Ms {
+            values.append(m)
+        }
+        for ep in wanEndpointsForSummary {
+            guard ep.latest?.success == true, let m = ep.meanLast5Ms else { continue }
+            values.append(m)
+        }
+        for ep in customEndpointsForSummary {
+            guard ep.latest?.success == true, let m = ep.meanLast5Ms else { continue }
+            values.append(m)
+        }
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private var summaryFooterRow: some View {
+        let dnsPart = summaryDnsTotalCount == 0 ? "—" : "\(summaryDnsGreenCount)/\(summaryDnsTotalCount)"
+        let pingPart: String
+        if let avg = summaryMeanPingAcrossActiveMs {
+            pingPart = "\(Int(avg.rounded())) ms"
+        } else {
+            pingPart = "—"
+        }
+        return HStack(alignment: .center, spacing: 8) {
+            Color.clear.frame(width: 34, height: 1)
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: 1)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(dnsPart)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(pingPart)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
     }
 
     private var gatewayEndpoint: EndpointStatus? {
@@ -380,63 +476,92 @@ struct StatusPopoverView: View {
         return lines
     }
 
-    private func endpointDetail(_ endpoint: EndpointStatus) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Button {
-                    selectedEndpointID = nil
-                } label: {
-                    Label("Back", systemImage: "chevron.left")
-                }
-                .buttonStyle(.borderless)
-                Spacer()
-            }
+    /// Default scroll region is taller when ICMP/DNS lines exist; caps keep the popover from exceeding the window.
+    private static func detailScrollAreaMaxHeight(dnsLineCount: Int, icmpSampleCount: Int) -> CGFloat {
+        let hasTerminalContent = dnsLineCount > 0 || icmpSampleCount > 0
+        if !hasTerminalContent {
+            return 420
+        }
+        let estimated =
+            CGFloat(dnsLineCount) * 21
+            + CGFloat(icmpSampleCount) * 17
+            + 180
+        return min(620, max(520, estimated))
+    }
 
-            Group {
-                if endpoint.kind == .gateway {
-                    Text("Local Network")
-                        .font(.headline)
-                    Text("\(endpoint.host) • mean(5): \(viewModel.meanText(for: endpoint))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("\(endpoint.label) (\(endpoint.host))")
-                        .font(.headline)
+    private func endpointDetail(_ endpoint: EndpointStatus) -> some View {
+        let dnsLines = viewModel.dnsProbeLogLines(for: endpoint)
+        let scrollMax = Self.detailScrollAreaMaxHeight(
+            dnsLineCount: dnsLines.count,
+            icmpSampleCount: endpoint.last10.count
+        )
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Button {
+                        selectedEndpointID = nil
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .buttonStyle(.borderless)
+                    Spacer()
                 }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                if !viewModel.dnsProbeHistoryLines.isEmpty {
-                    Text("Recent DNS probes (last \(viewModel.dnsProbeHistoryLines.count))")
+                .padding(.bottom, 10)
+
+                Group {
+                    if endpoint.kind == .gateway {
+                        Text("Local Network")
+                            .font(.headline)
+                        Text("\(endpoint.host) • mean(5): \(viewModel.meanText(for: endpoint))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 2)
+                    } else {
+                        Text("\(endpoint.label) (\(endpoint.host))")
+                            .font(.headline)
+                    }
+                }
+                .padding(.bottom, 14)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    if !dnsLines.isEmpty {
+                        Text("Last 2 DNS Queries")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ForEach(Array(dnsLines.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .foregroundColor(terminalTextColor)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    Text("Last 10 ICMP pings")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    ForEach(Array(viewModel.dnsProbeHistoryLines.enumerated()), id: \.offset) { _, line in
-                        Text(line)
+                        .padding(.top, dnsLines.isEmpty ? 0 : 10)
+                    ForEach(Array(endpoint.last10.enumerated()), id: \.offset) { _, sample in
+                        Text(sampleLine(sample))
                             .font(.system(size: 12, weight: .regular, design: .monospaced))
                             .foregroundColor(terminalTextColor)
                             .textSelection(.enabled)
                     }
+                    if endpoint.last10.isEmpty {
+                        Text("No ICMP samples yet")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(terminalTextColor.opacity(0.75))
+                    }
                 }
-                Text("Last 10 ICMP pings")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, viewModel.dnsProbeHistoryLines.isEmpty ? 0 : 4)
-                ForEach(Array(endpoint.last10.enumerated()), id: \.offset) { _, sample in
-                    Text(sampleLine(sample))
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
-                        .foregroundColor(terminalTextColor)
-                        .textSelection(.enabled)
-                }
-                if endpoint.last10.isEmpty {
-                    Text("No ICMP samples yet")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(terminalTextColor.opacity(0.75))
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(terminalBackgroundColor)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Color.clear
+                    .frame(height: 12)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .background(terminalBackgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
+        .frame(maxHeight: scrollMax, alignment: .top)
     }
 
     private var terminalBackgroundColor: Color {
@@ -459,6 +584,10 @@ struct StatusPopoverView: View {
 
     private func endpointColor(_ endpoint: EndpointStatus) -> Color {
         if endpoint.latest?.success == true {
+            let threshold = viewModel.settingsStore.config.healthyThresholdMs
+            if let mean = endpoint.meanLast5Ms, mean > threshold {
+                return .orange
+            }
             return HealthAppearance.successGreen(for: colorScheme)
         }
         if endpoint.latest?.timedOut == true {
@@ -467,10 +596,48 @@ struct StatusPopoverView: View {
         return .orange
     }
 
+    /// Matches Settings → WAN targets: turns off the toggle and drops the row after `rebuildEndpoints`.
+    private func disableWanTarget(_ kind: EndpointKind) {
+        if let id = Self.wanEndpointSelectionId(for: kind), selectedEndpointID == id {
+            selectedEndpointID = nil
+        }
+        var c = viewModel.settingsStore.config
+        switch kind {
+        case .cloudflare:
+            c.pingCloudflareEnabled = false
+        case .google:
+            c.pingGoogleEnabled = false
+        case .openDNS:
+            c.pingOpenDNSEnabled = false
+        case .level3:
+            c.pingLevel3Enabled = false
+        case .quad9:
+            c.pingQuad9Enabled = false
+        case .gateway, .custom:
+            return
+        }
+        viewModel.settingsStore.config = c
+    }
+
+    private static func wanEndpointSelectionId(for kind: EndpointKind) -> String? {
+        switch kind {
+        case .cloudflare: return "cloudflare"
+        case .google: return "google"
+        case .openDNS: return "opendns"
+        case .level3: return "level3"
+        case .quad9: return "quad9"
+        case .gateway, .custom: return nil
+        }
+    }
+
+    private static let icmpSampleTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
     private func sampleLine(_ sample: PingSample) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        let ts = formatter.string(from: sample.timestamp)
+        let ts = Self.icmpSampleTimeFormatter.string(from: sample.timestamp)
         if sample.success, let rtt = sample.rttMs {
             return "\(ts) ICMP reply time=\(Int(rtt.rounded()))ms"
         }

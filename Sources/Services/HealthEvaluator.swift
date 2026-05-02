@@ -43,7 +43,7 @@ final class HealthEvaluator {
         }
 
         let now = Date()
-        let canTransitionByDwell = now.timeIntervalSince(lastTransitionAt) >= input.config.minimumStateDwellSeconds
+        let canTransitionByDwell = now.timeIntervalSince(lastTransitionAt) >= input.config.minimumSecondsBetweenStatusChanges
         let requiredCount = transitionCount(
             from: snapshot.state,
             to: candidate.state,
@@ -67,7 +67,7 @@ final class HealthEvaluator {
     private func transitionCount(from: NetworkHealthState, to: NetworkHealthState, config: AppConfig) -> Int {
         let fromRank = rank(for: from)
         let toRank = rank(for: to)
-        return toRank < fromRank ? max(1, config.antiFlapEnterCount) : max(1, config.antiFlapRecoverCount)
+        return max(1, config.statusChangeConfirmationCount)
     }
 
     private func rank(for state: NetworkHealthState) -> Int {

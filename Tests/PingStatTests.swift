@@ -4,6 +4,60 @@ import XCTest
 
 @MainActor
 final class PingStatTests: XCTestCase {
+    func testConnectivityProbePolicySkipsICMPAndDNSWhenPathUnsatisfied() {
+        XCTAssertFalse(ConnectivityProbePolicy.shouldRunICMPProbes(pathSatisfied: false))
+        XCTAssertFalse(ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: false))
+        XCTAssertTrue(ConnectivityProbePolicy.shouldRunICMPProbes(pathSatisfied: true))
+        XCTAssertTrue(ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: true))
+    }
+
+    func testFallbackDNSServersOnlyIncludesEnabledWANTargets() {
+        var c = AppConfig.defaults
+        c.pingCloudflareEnabled = false
+        c.pingGoogleEnabled = true
+        c.pingOpenDNSEnabled = false
+        c.pingLevel3Enabled = false
+        c.pingQuad9Enabled = false
+        XCTAssertEqual(c.fallbackDNSServers, ["8.8.8.8"])
+        XCTAssertEqual(c.enabledWanResolverTargets.map(\.kind), [.google])
+    }
+
+    func testFallbackDNSServersEmptyWhenAllPublicWANDisabled() {
+        var c = AppConfig.defaults
+        c.pingCloudflareEnabled = false
+        c.pingGoogleEnabled = false
+        c.pingOpenDNSEnabled = false
+        c.pingLevel3Enabled = false
+        c.pingQuad9Enabled = false
+        XCTAssertTrue(c.fallbackDNSServers.isEmpty)
+        XCTAssertTrue(c.enabledWanResolverTargets.isEmpty)
+    }
+
+    func testOfflineProbeDisplayClearsEndpointHistory() {
+        let now = Date()
+        let sample = PingSample(
+            timestamp: now,
+            success: true,
+            rttMs: 12,
+            timedOut: false,
+            message: "ok"
+        )
+        let ep = EndpointStatus(
+            id: "cloudflare",
+            label: "Cloudflare",
+            host: "1.1.1.1",
+            kind: .cloudflare,
+            meanLast5Ms: 12,
+            last10: [sample],
+            latest: sample
+        )
+        let cleared = OfflineProbeDisplayPolicy.probeHistoryClearedEndpoints([ep])
+        XCTAssertEqual(cleared.count, 1)
+        XCTAssertTrue(cleared[0].last10.isEmpty)
+        XCTAssertNil(cleared[0].latest)
+        XCTAssertNil(cleared[0].meanLast5Ms)
+    }
+
     func testHealthEvaluatorMarksOfflineWhenNoConnectivity() {
         let evaluator = HealthEvaluator()
         let input = HealthEvaluationInput(
@@ -104,8 +158,10 @@ final class PingStatTests: XCTestCase {
             config: .defaults
         )
 
-        _ = evaluator.evaluate(input)
-        _ = evaluator.evaluate(input)
+        let confirmations = AppConfig.defaults.statusChangeConfirmationCount
+        for _ in 0 ..< confirmations {
+            _ = evaluator.evaluate(input)
+        }
         let snapshot = evaluator.evaluate(input)
 
         XCTAssertEqual(snapshot.state, .blazing)
@@ -192,7 +248,8 @@ final class PingStatTests: XCTestCase {
             config: .defaults
         )
 
-        for _ in 0 ..< 4 {
+        let confirmations = AppConfig.defaults.statusChangeConfirmationCount
+        for _ in 0 ..< confirmations {
             _ = evaluator.evaluate(input)
         }
         let snapshot = evaluator.evaluate(input)
@@ -273,6 +330,36 @@ final class PingStatTests: XCTestCase {
                 sentNanos: sentNanos
             )
         )
+    }
+
+    func testParseDNSDetailedResponseIncludesATypeAndRdata() {
+        let id: UInt16 = 0xACE1
+        var d = Data()
+        d.append(UInt8(truncatingIfNeeded: id >> 8))
+        d.append(UInt8(truncatingIfNeeded: id & 0xff))
+        d.append(contentsOf: [0x81, 0x80])
+        d.append(contentsOf: [0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00])
+        func label(_ s: String) {
+            let b = Array(s.utf8)
+            d.append(UInt8(b.count))
+            d.append(contentsOf: b)
+        }
+        label("captive")
+        label("apple")
+        label("com")
+        d.append(0)
+        d.append(contentsOf: [0x00, 0x01, 0x00, 0x01])
+        d.append(contentsOf: [0xc0, 0x0c])
+        d.append(contentsOf: [0x00, 0x01, 0x00, 0x01])
+        d.append(contentsOf: [0x00, 0x00, 0x00, 0x01])
+        d.append(contentsOf: [0x00, 0x04])
+        d.append(contentsOf: [17, 253, 144, 10])
+
+        let r = DNSUDPQuery.parseDetailedResponse(data: d, expectedID: id)
+        XCTAssertNotNil(r)
+        XCTAssertEqual(r?.ipv4Addresses, ["17.253.144.10"])
+        XCTAssertEqual(r?.responseCode, 0)
+        XCTAssertTrue(r?.answerSummaries.contains("A 17.253.144.10") ?? false)
     }
 
     func testParseIPv6NameserverLinkLocalScope() {

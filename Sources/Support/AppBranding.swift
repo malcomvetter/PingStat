@@ -44,4 +44,35 @@ enum HealthAppearance {
         }
         return NSColor(srgbRed: 0.086, green: 0.38, blue: 0.204, alpha: 1)
     }
+
+    // MARK: - Status bar / popover health mark (must stay in sync)
+
+    /// SF Symbol for the menu bar and main popover: always `cellularbars`; tint uses ``statusHealthMarkNSColor``.
+    static func statusHealthSymbolName(startupMark _: Bool, health _: NetworkHealthState) -> String {
+        "cellularbars"
+    }
+
+    /// Single palette color for ``statusHealthSymbolName(startupMark:health:)`` — same logic as the status item image.
+    static func statusHealthMarkNSColor(startupMark: Bool, health: NetworkHealthState) -> NSColor {
+        if startupMark {
+            let darkChrome = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return darkChrome ? .white : .darkGray
+        }
+        switch health {
+        case .offline:
+            return .systemRed
+        case .degraded:
+            return .systemOrange
+        case .healthy:
+            return successGreenNSColor()
+        case .blazing:
+            // #8D4FFF — menu bar + popover health mark when blazing.
+            return NSColor(srgbRed: 141 / 255, green: 79 / 255, blue: 255 / 255, alpha: 1)
+        }
+    }
+
+    /// SwiftUI tint matching ``statusHealthMarkNSColor(startupMark:health:)``.
+    static func statusHealthMarkColor(startupMark: Bool, health: NetworkHealthState) -> Color {
+        Color(nsColor: statusHealthMarkNSColor(startupMark: startupMark, health: health))
+    }
 }
