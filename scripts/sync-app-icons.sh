@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Resize Design/PingStat-app-icon-master.png into Assets.xcassets/AppIcon.appiconset (macOS).
+# To regenerate the master from code (teal cellularbars + PingStat on black): `swift scripts/GenerateAppIcon.swift`
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MASTER="${ROOT}/Design/PingStat-app-icon-master.png"

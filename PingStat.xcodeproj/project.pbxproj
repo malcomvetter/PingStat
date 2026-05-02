@@ -12,6 +12,7 @@
 		1CB51DC3ABC4DDA6736216D4 /* DNSUDPQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */; };
 		237A4EE84D9A068A437F1D20 /* PingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AB7191F31285389A822CB4C /* PingService.swift */; };
 		24E7C5B9AB6DD2F7B8946ADA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EC8C7B63BFCA68292C877C /* AppDelegate.swift */; };
+		2CC384E92D1EDAB39CE2B865 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8D01FB0B5327F3F176F3F19E /* Assets.xcassets */; };
 		342E0FD91394B57F2EDF728E /* AppBranding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62533DA3EADB1D3A524886AF /* AppBranding.swift */; };
 		3B6EE8F747DF3C7FED6DFE23 /* ConnectivityProbePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */; };
 		45EEC788693127CBB984774C /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF8C65BB3FD743DF2057DBF /* StatusItemController.swift */; };
@@ -62,6 +63,7 @@
 		74D5E7E1250837BE6A66018C /* ICMPPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICMPPing.swift; sourceTree = "<group>"; };
 		76873EC3FE57B386B3BC9D81 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		796AA9EB01C60F878051F32A /* PingStat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PingStat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8D01FB0B5327F3F176F3F19E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		977DCB59E911BDE414C16FDD /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A1659AE96406BFC6A44FFA3D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityProbePolicy.swift; sourceTree = "<group>"; };
@@ -109,6 +111,7 @@
 		5BCC50E95F372BB9BC0BDD76 = {
 			isa = PBXGroup;
 			children = (
+				8D01FB0B5327F3F176F3F19E /* Assets.xcassets */,
 				5A04189EB5D11A1F27BCB08F /* Sources */,
 				691DEAFCA3A15E8D41E4C41B /* Tests */,
 				30BB3C462B411A4DF27CEA0D /* Products */,
@@ -206,6 +209,7 @@
 			buildConfigurationList = 34AB850E9D9DF70CDD6BFA31 /* Build configuration list for PBXNativeTarget "PingStat" */;
 			buildPhases = (
 				6E23128D17E91F6340ED7D3F /* Sources */,
+				A4FC8C77B7D51EEE12F574D7 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -251,6 +255,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A4FC8C77B7D51EEE12F574D7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2CC384E92D1EDAB39CE2B865 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		6E23128D17E91F6340ED7D3F /* Sources */ = {
@@ -309,6 +324,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -316,6 +332,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.PingStat;
 				PRODUCT_MODULE_NAME = PingStat;
 				PRODUCT_NAME = PingStat;
@@ -410,6 +427,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -417,6 +435,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.PingStat;
 				PRODUCT_MODULE_NAME = PingStat;
 				PRODUCT_NAME = PingStat;

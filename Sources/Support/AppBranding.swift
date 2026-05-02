@@ -45,6 +45,18 @@ enum HealthAppearance {
         return NSColor(srgbRed: 0.086, green: 0.38, blue: 0.204, alpha: 1)
     }
 
+    /// Teal used for global ``NetworkHealthState.blazing`` and per-row “blazing-class” ping/DNS accents in the popover.
+    static func blazingAccentNSColor() -> NSColor {
+        let darkChrome = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return darkChrome
+            ? NSColor(calibratedRed: 0.15, green: 0.88, blue: 0.82, alpha: 1)
+            : NSColor(calibratedRed: 0.0, green: 0.52, blue: 0.48, alpha: 1)
+    }
+
+    static func blazingAccentColor() -> Color {
+        Color(nsColor: blazingAccentNSColor())
+    }
+
     // MARK: - Status bar / popover health mark (must stay in sync)
 
     /// SF Symbol for the menu bar and main popover: always `cellularbars`; tint uses ``statusHealthMarkNSColor``.
@@ -66,8 +78,7 @@ enum HealthAppearance {
         case .healthy:
             return successGreenNSColor()
         case .blazing:
-            // #8D4FFF — menu bar + popover health mark when blazing.
-            return NSColor(srgbRed: 141 / 255, green: 79 / 255, blue: 255 / 255, alpha: 1)
+            return blazingAccentNSColor()
         }
     }
 

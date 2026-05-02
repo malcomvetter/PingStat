@@ -5,7 +5,7 @@ import CoreImage.CIFilterBuiltins
 import Foundation
 
 /// Run from repo root: `swift scripts/GenerateMenuBarMarks.swift`
-/// Composites `AppIcon.appiconset/icon_128x128@2x.png` with SF Symbol overlays into template-friendly PNGs.
+/// Composites `AppIcon.appiconset/icon_128x128@2x.png` (regenerate via `swift scripts/GenerateAppIcon.swift`) with SF Symbol overlays into template-friendly PNGs.
 
 enum MarkKind: String, CaseIterable {
     case startup

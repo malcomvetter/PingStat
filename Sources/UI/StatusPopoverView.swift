@@ -277,7 +277,7 @@ struct StatusPopoverView: View {
                     pingTint: endpointColor(gw),
                     pingMsText: viewModel.meanText(for: gw),
                     dnsSymbol: primaryDNSSymbol,
-                    dnsTint: primaryDNSTint,
+                    dnsTint: primaryDNSTint(gatewayForTeal: gw),
                     showChevron: true
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -292,7 +292,7 @@ struct StatusPopoverView: View {
                 pingTint: viewModel.context.connected ? HealthAppearance.successGreen(for: colorScheme) : .red,
                 pingMsText: "—",
                 dnsSymbol: primaryDNSSymbol,
-                dnsTint: primaryDNSTint,
+                dnsTint: primaryDNSTint(gatewayForTeal: nil),
                 showChevron: false
             )
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -323,7 +323,7 @@ struct StatusPopoverView: View {
             pingTint: endpointColor(endpoint),
             pingMsText: viewModel.meanText(for: endpoint),
             dnsSymbol: fallbackDNSSymbol(host: endpoint.host),
-            dnsTint: fallbackDNSTint(host: endpoint.host),
+            dnsTint: fallbackDNSTint(endpoint: endpoint),
             showChevron: true
         )
     }
@@ -338,7 +338,7 @@ struct StatusPopoverView: View {
             pingTint: endpointColor(endpoint),
             pingMsText: viewModel.meanText(for: endpoint),
             dnsSymbol: dnsOn ? customDNSSymbol(host: endpoint.host) : "minus.circle.fill",
-            dnsTint: dnsOn ? customDNSTint(host: endpoint.host) : .secondary,
+            dnsTint: dnsOn ? customDNSTint(endpoint: endpoint) : .secondary,
             showChevron: true,
             dnsLabel: dnsOn ? "DNS" : "—",
             showDNSColumn: dnsOn
@@ -417,11 +417,25 @@ struct StatusPopoverView: View {
         return dns.timedOutServers.contains(resolver) ? "xmark.circle.fill" : "checkmark.circle.fill"
     }
 
-    private var primaryDNSTint: Color {
+    /// Primary DNS column: teal when resolver answered and gateway ICMP mean matches blazing threshold (same rule as ``HealthEvaluator`` WAN blazing contributor).
+    private func primaryDNSTint(gatewayForTeal: EndpointStatus?) -> Color {
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return .secondary }
         guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else { return .secondary }
-        return dns.timedOutServers.contains(resolver) ? .red : HealthAppearance.successGreen(for: colorScheme)
+        if dns.timedOutServers.contains(resolver) {
+            return .red
+        }
+        if let gw = gatewayForTeal, primaryDnsAnsweredOK, pingMeanQualifiesBlazing(gw) {
+            return HealthAppearance.blazingAccentColor()
+        }
+        return HealthAppearance.successGreen(for: colorScheme)
+    }
+
+    private var primaryDnsAnsweredOK: Bool {
+        let dns = viewModel.dnsStatus
+        guard dns.lastCheck != nil else { return false }
+        guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else { return false }
+        return !dns.timedOutServers.contains(resolver)
     }
 
     private func fallbackDNSSymbol(host: String) -> String {
@@ -431,10 +445,13 @@ struct StatusPopoverView: View {
         return ok ? "checkmark.circle.fill" : "xmark.circle.fill"
     }
 
-    private func fallbackDNSTint(host: String) -> Color {
+    private func fallbackDNSTint(endpoint: EndpointStatus) -> Color {
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return .secondary }
-        guard let ok = dns.fallbackAnsweredByServer[host] else { return .orange }
+        guard let ok = dns.fallbackAnsweredByServer[endpoint.host] else { return .orange }
+        if ok, pingMeanQualifiesBlazing(endpoint) {
+            return HealthAppearance.blazingAccentColor()
+        }
         return ok ? HealthAppearance.successGreen(for: colorScheme) : .red
     }
 
@@ -445,11 +462,20 @@ struct StatusPopoverView: View {
         return ok ? "checkmark.circle.fill" : "xmark.circle.fill"
     }
 
-    private func customDNSTint(host: String) -> Color {
+    private func customDNSTint(endpoint: EndpointStatus) -> Color {
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return .secondary }
-        guard let ok = dns.customNameserverProbes[host] else { return .orange }
+        guard let ok = dns.customNameserverProbes[endpoint.host] else { return .orange }
+        if ok, pingMeanQualifiesBlazing(endpoint) {
+            return HealthAppearance.blazingAccentColor()
+        }
         return ok ? HealthAppearance.successGreen(for: colorScheme) : .red
+    }
+
+    /// Same inequality as ``HealthEvaluator.isBlazing(wanMeansMs:config:)`` per row: mean(5) strictly below blazing threshold.
+    private func pingMeanQualifiesBlazing(_ endpoint: EndpointStatus) -> Bool {
+        guard endpoint.latest?.success == true, let mean = endpoint.meanLast5Ms else { return false }
+        return mean < viewModel.settingsStore.config.blazingThresholdMs
     }
 
     private var dnsFootnoteLines: [String] {
@@ -584,6 +610,9 @@ struct StatusPopoverView: View {
 
     private func endpointColor(_ endpoint: EndpointStatus) -> Color {
         if endpoint.latest?.success == true {
+            if pingMeanQualifiesBlazing(endpoint) {
+                return HealthAppearance.blazingAccentColor()
+            }
             let threshold = viewModel.settingsStore.config.healthyThresholdMs
             if let mean = endpoint.meanLast5Ms, mean > threshold {
                 return .orange
