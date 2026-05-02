@@ -56,6 +56,33 @@ final class PingStatTests: XCTestCase {
             last10: [],
             latest: .init(timestamp: now, success: true, rttMs: 22, timedOut: false, message: "ok")
         )
+        let openDNS = EndpointStatus(
+            id: "opendns",
+            label: "OpenDNS",
+            host: "208.67.220.220",
+            kind: .openDNS,
+            meanLast5Ms: 21,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 21, timedOut: false, message: "ok")
+        )
+        let level3 = EndpointStatus(
+            id: "level3",
+            label: "Level3",
+            host: "4.2.2.1",
+            kind: .level3,
+            meanLast5Ms: 19,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 19, timedOut: false, message: "ok")
+        )
+        let quad9 = EndpointStatus(
+            id: "quad9",
+            label: "Quad9",
+            host: "9.9.9.9",
+            kind: .quad9,
+            meanLast5Ms: 20,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 20, timedOut: false, message: "ok")
+        )
         let input = HealthEvaluationInput(
             context: .init(
                 connected: true,
@@ -68,7 +95,10 @@ final class PingStatTests: XCTestCase {
             endpointStatuses: [
                 .gateway: gateway,
                 .cloudflare: cloudflare,
-                .google: google
+                .google: google,
+                .openDNS: openDNS,
+                .level3: level3,
+                .quad9: quad9
             ],
             dnsStatus: DNSCheckStatus(),
             config: .defaults
@@ -114,6 +144,33 @@ final class PingStatTests: XCTestCase {
             last10: [],
             latest: .init(timestamp: now, success: true, rttMs: 55, timedOut: false, message: "ok")
         )
+        let openDNS = EndpointStatus(
+            id: "opendns",
+            label: "OpenDNS",
+            host: "208.67.220.220",
+            kind: .openDNS,
+            meanLast5Ms: 53,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 53, timedOut: false, message: "ok")
+        )
+        let level3 = EndpointStatus(
+            id: "level3",
+            label: "Level3",
+            host: "4.2.2.1",
+            kind: .level3,
+            meanLast5Ms: 54,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 54, timedOut: false, message: "ok")
+        )
+        let quad9 = EndpointStatus(
+            id: "quad9",
+            label: "Quad9",
+            host: "9.9.9.9",
+            kind: .quad9,
+            meanLast5Ms: 52,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 52, timedOut: false, message: "ok")
+        )
         let input = HealthEvaluationInput(
             context: .init(
                 connected: true,
@@ -126,7 +183,10 @@ final class PingStatTests: XCTestCase {
             endpointStatuses: [
                 .gateway: gateway,
                 .cloudflare: cloudflare,
-                .google: google
+                .google: google,
+                .openDNS: openDNS,
+                .level3: level3,
+                .quad9: quad9
             ],
             dnsStatus: dns,
             config: .defaults

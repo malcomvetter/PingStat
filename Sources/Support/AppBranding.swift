@@ -1,6 +1,47 @@
+import AppKit
 import Foundation
+import SwiftUI
 
 enum AppBranding {
     static let productName = "PingStat"
     static var settingsWindowTitle: String { "\(productName) Settings" }
+
+    /// Template PDF/PNG names in `Assets.xcassets` for the menu bar extra (mark + overlay). Add images to the catalog to replace SF Symbol fallbacks.
+    enum MenuBarMark {
+        static let startup = "PingStatMenuStartup"
+        static func healthImageName(for state: NetworkHealthState) -> String {
+            switch state {
+            case .blazing:
+                return "PingStatMenuBlazing"
+            case .healthy:
+                return "PingStatMenuHealthy"
+            case .degraded:
+                return "PingStatMenuDegraded"
+            case .offline:
+                return "PingStatMenuOffline"
+            }
+        }
+    }
+}
+
+/// Shared “healthy / success” green for UI that should stay vivid in dark mode but read clearly in light mode.
+enum HealthAppearance {
+    static func successGreen(for colorScheme: ColorScheme) -> Color {
+        switch colorScheme {
+        case .dark:
+            return .green
+        case .light:
+            return Color(red: 0.086, green: 0.38, blue: 0.204)
+        @unknown default:
+            return .green
+        }
+    }
+
+    /// Matches ``successGreen(for:)`` for `NSMenu` / `NSImage` symbol palette colors.
+    static func successGreenNSColor() -> NSColor {
+        if NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return .systemGreen
+        }
+        return NSColor(srgbRed: 0.086, green: 0.38, blue: 0.204, alpha: 1)
+    }
 }

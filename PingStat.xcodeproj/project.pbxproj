@@ -26,6 +26,7 @@
 		B5B32EE8F5DCACD1BD719048 /* DNSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70073510CB9A14E301BA63F9 /* DNSService.swift */; };
 		CFB8710E19EF01B583B3F8C4 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0444896208B2068A335E7171 /* SettingsStore.swift */; };
 		D1C40ECFBE4D1A2253B0F744 /* PingStatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7FCE5FA1D79892C3442C57 /* PingStatApp.swift */; };
+		DC6E9E4D189DEA67BFDEB03F /* SystemDNSConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B605F9D5B139919A4DA1D4 /* SystemDNSConfiguration.swift */; };
 		E430ABC98D168E41C260C420 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E778EBA074954763C4D61921 /* NetworkModels.swift */; };
 		EDF3F7D65718B527A0EE26E2 /* PingStatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42C38ED7D8811349CD8EB38D /* PingStatTests.swift */; };
 		F87DBBCA907F0E2C79F0AC7C /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76873EC3FE57B386B3BC9D81 /* AppConfig.swift */; };
@@ -51,6 +52,7 @@
 		3E74D92F746BEF37958304F8 /* PingStatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PingStatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3F6F1CFFDDC4F3E9E6663C87 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		42C38ED7D8811349CD8EB38D /* PingStatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingStatTests.swift; sourceTree = "<group>"; };
+		43B605F9D5B139919A4DA1D4 /* SystemDNSConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemDNSConfiguration.swift; sourceTree = "<group>"; };
 		4733B571641CE69A059B04A8 /* DebugExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugExportService.swift; sourceTree = "<group>"; };
 		479FE9B23D7273D786A96087 /* StatusPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusPopoverView.swift; sourceTree = "<group>"; };
 		5F33E6A736CD0B40FF3953EF /* CommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunner.swift; sourceTree = "<group>"; };
@@ -146,6 +148,7 @@
 				5F33E6A736CD0B40FF3953EF /* CommandRunner.swift */,
 				BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */,
 				74D5E7E1250837BE6A66018C /* ICMPPing.swift */,
+				43B605F9D5B139919A4DA1D4 /* SystemDNSConfiguration.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -273,6 +276,7 @@
 				FCE84EE4C9FF2EE3144D099F /* SettingsWindowController.swift in Sources */,
 				45EEC788693127CBB984774C /* StatusItemController.swift in Sources */,
 				A3DC855F3FA93B9A72B141F0 /* StatusPopoverView.swift in Sources */,
+				DC6E9E4D189DEA67BFDEB03F /* SystemDNSConfiguration.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

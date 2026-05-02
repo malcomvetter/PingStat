@@ -21,9 +21,16 @@ final class DNSService {
     func check(
         configuredServers: [String],
         fallbackServers: [String],
+        customNameservers: [String],
         timeoutMs: Int
     ) async -> DNSCheckResult {
         let configured = configuredServers.filter { !$0.isEmpty }
+        let customFiltered = customNameservers.filter { !$0.isEmpty }
+        async let customResponsesTask = resolveAcrossServers(
+            servers: customFiltered,
+            timeoutMs: timeoutMs
+        )
+
         var status = DNSCheckStatus()
         status.lastCheck = Date()
         status.configuredServers = configured
@@ -35,8 +42,9 @@ final class DNSService {
         )
 
         if configured.isEmpty {
-            let fallbackResponses = await fallbackResponsesTask
+            let (fallbackResponses, customResponses) = await (fallbackResponsesTask, customResponsesTask)
             Self.applyFallbackAnswerMap(&status, responses: fallbackResponses)
+            Self.applyCustomProbes(&status, responses: customResponses)
             status.allConfiguredTimedOut = true
             let fallbackSuccesses = fallbackResponses.filter(\.success)
             status.fallbackWorked = !fallbackSuccesses.isEmpty
@@ -56,8 +64,13 @@ final class DNSService {
             servers: configured,
             timeoutMs: timeoutMs
         )
-        let (configuredResponses, fallbackResponses) = await (configuredResponsesTask, fallbackResponsesTask)
+        let (configuredResponses, fallbackResponses, customResponses) = await (
+            configuredResponsesTask,
+            fallbackResponsesTask,
+            customResponsesTask
+        )
         Self.applyFallbackAnswerMap(&status, responses: fallbackResponses)
+        Self.applyCustomProbes(&status, responses: customResponses)
 
         let configuredSuccesses = configuredResponses.filter(\.success)
         let configuredTimeouts = configuredResponses.filter { !$0.success }.map(\.server)
@@ -68,8 +81,8 @@ final class DNSService {
 
         if status.allConfiguredTimedOut {
             let configuredSet = Set(configured)
-            let cloudflareGoogle = Set(fallbackServers)
-            let shouldFallback = configuredSet.isDisjoint(with: cloudflareGoogle)
+            let publicFallbackIPs = Set(fallbackServers)
+            let shouldFallback = configuredSet.isDisjoint(with: publicFallbackIPs)
             if shouldFallback {
                 let fallbackSuccesses = fallbackResponses.filter(\.success)
                 status.fallbackWorked = !fallbackSuccesses.isEmpty
@@ -87,6 +100,12 @@ final class DNSService {
         )
 
         return DNSCheckResult(status: status)
+    }
+
+    private static func applyCustomProbes(_ status: inout DNSCheckStatus, responses: [ServerResolution]) {
+        for r in responses {
+            status.customNameserverProbes[r.server] = r.success
+        }
     }
 
     private static func applyFallbackAnswerMap(_ status: inout DNSCheckStatus, responses: [ServerResolution]) {

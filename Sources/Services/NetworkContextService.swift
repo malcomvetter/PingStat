@@ -47,12 +47,6 @@ final class NetworkContextService: ObservableObject {
             arguments: ["-n", "get", "default"],
             timeoutMs: 1_000
         ))?.output ?? ""
-        let dnsData = (try? await commandRunner.run(
-            launchPath: "/usr/sbin/scutil",
-            arguments: ["--dns"],
-            timeoutMs: 1_500
-        ))?.output ?? ""
-
         var interfaceName = parseInterface(routeData)
         var gateway = Self.normalizedIPv4Gateway(parseGateway(routeData))
         var interfaceType = inferInterfaceType(interfaceName)
@@ -76,7 +70,7 @@ final class NetworkContextService: ObservableObject {
                 gateway = await gatewayFromRouteGet(host: "1.1.1.1")
             }
         }
-        let dnsServers = await resolveDNSServers(scutilOutput: dnsData, interfaceBSDName: interfaceName)
+        let dnsServers = await resolveDNSServers(interfaceBSDName: interfaceName)
 
         context = NetworkContext(
             connected: connected,
@@ -222,9 +216,10 @@ final class NetworkContextService: ObservableObject {
         return anyGateway
     }
 
-    /// Prefer real resolver IPs from `scutil`; drop `127.0.0.1` when other nameservers exist. If only the stub appears, use `networksetup -getdnsservers` for the Wi‑Fi/Ethernet service tied to `en0`, etc.
-    private func resolveDNSServers(scutilOutput: String, interfaceBSDName: String?) async -> [String] {
-        let raw = Self.collectNameserversInOrder(from: scutilOutput)
+    /// Resolver IPs from **SystemConfiguration** (`SCDynamicStore`, same source as `scutil --dns`), then
+    /// `networksetup -getdnsservers` if the store lists only loopback or is empty.
+    private func resolveDNSServers(interfaceBSDName: String?) async -> [String] {
+        let raw = SystemDNSConfiguration.orderedNameserverAddresses(interfaceHint: interfaceBSDName)
         let nonLoopback = raw.filter { !["127.0.0.1", "0.0.0.0", "::1"].contains($0) }
         if !nonLoopback.isEmpty {
             return nonLoopback
@@ -241,8 +236,7 @@ final class NetworkContextService: ObservableObject {
         return []
     }
 
-    /// Pulls `nameserver[n] : …` from `scutil --dns` in order. Parses **resolver** blocks so `if_index : N (en0)` applies to
-    /// **link-local IPv6** nameservers that omit `%` (common); otherwise UDP cannot scope `fe80::/64` correctly.
+    /// Parses **scutil --dns**-style text for tests (resolver blocks + `if_index`). Production uses ``SystemDNSConfiguration``.
     static func collectNameserversInOrder(from dnsOutput: String) -> [String] {
         var ordered: [String] = []
         var seen = Set<String>()
