@@ -4,6 +4,38 @@ import XCTest
 
 @MainActor
 final class PingStatTests: XCTestCase {
+    func testConnectivityProbePolicySkipsICMPAndDNSWhenPathUnsatisfied() {
+        XCTAssertFalse(ConnectivityProbePolicy.shouldRunICMPProbes(pathSatisfied: false))
+        XCTAssertFalse(ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: false))
+        XCTAssertTrue(ConnectivityProbePolicy.shouldRunICMPProbes(pathSatisfied: true))
+        XCTAssertTrue(ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: true))
+    }
+
+    func testOfflineProbeDisplayClearsEndpointHistory() {
+        let now = Date()
+        let sample = PingSample(
+            timestamp: now,
+            success: true,
+            rttMs: 12,
+            timedOut: false,
+            message: "ok"
+        )
+        let ep = EndpointStatus(
+            id: "cloudflare",
+            label: "Cloudflare",
+            host: "1.1.1.1",
+            kind: .cloudflare,
+            meanLast5Ms: 12,
+            last10: [sample],
+            latest: sample
+        )
+        let cleared = OfflineProbeDisplayPolicy.probeHistoryClearedEndpoints([ep])
+        XCTAssertEqual(cleared.count, 1)
+        XCTAssertTrue(cleared[0].last10.isEmpty)
+        XCTAssertNil(cleared[0].latest)
+        XCTAssertNil(cleared[0].meanLast5Ms)
+    }
+
     func testHealthEvaluatorMarksOfflineWhenNoConnectivity() {
         let evaluator = HealthEvaluator()
         let input = HealthEvaluationInput(

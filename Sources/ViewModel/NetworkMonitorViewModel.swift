@@ -49,13 +49,11 @@ final class NetworkMonitorViewModel: ObservableObject {
 
     init(
         settingsStore: SettingsStore,
-        commandRunner: CommandRunner = CommandRunner(),
         logging: LoggingService = LoggingService()
     ) {
         self.settingsStore = settingsStore
         self.logging = logging
         self.networkContextService = NetworkContextService(
-            commandRunner: commandRunner,
             logger: logging,
             debugEnabledProvider: { settingsStore.config.debugLoggingEnabled }
         )
@@ -105,6 +103,9 @@ final class NetworkMonitorViewModel: ObservableObject {
         statusIconGracePeriodTask = nil
         pingLoopTask?.cancel()
         dnsLoopTask?.cancel()
+        pingLoopTask = nil
+        dnsLoopTask = nil
+        networkContextService.stop()
         if let powerModeObserver {
             NotificationCenter.default.removeObserver(powerModeObserver)
             self.powerModeObserver = nil
@@ -159,8 +160,14 @@ final class NetworkMonitorViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newContext in
                 guard let self else { return }
+                let hadConnectivity = self.context.connected
                 let oldGateway = self.context.gatewayIP
                 self.context = newContext
+                if hadConnectivity, !newContext.connected {
+                    self.endpoints = OfflineProbeDisplayPolicy.probeHistoryClearedEndpoints(self.endpoints)
+                    self.dnsStatus = DNSCheckStatus()
+                    self.previousDNSFiltering = false
+                }
                 if oldGateway != newContext.gatewayIP {
                     self.rebuildEndpoints()
                 }
@@ -235,6 +242,9 @@ final class NetworkMonitorViewModel: ObservableObject {
         if endpoints.isEmpty {
             rebuildEndpoints()
         }
+        guard ConnectivityProbePolicy.shouldRunICMPProbes(pathSatisfied: context.connected) else {
+            return
+        }
         let targets = endpoints.map {
             PingTarget(
                 id: $0.id,
@@ -275,6 +285,9 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     private func runDNSTick() async {
+        guard ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: context.connected) else {
+            return
+        }
         let customNameservers: [String] = {
             guard let t = settingsStore.config.customTarget, t.dnsProbesEnabled else { return [] }
             let ip = t.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)

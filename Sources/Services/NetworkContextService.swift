@@ -8,16 +8,13 @@ final class NetworkContextService: ObservableObject {
 
     private let monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "com.example.PingStat.path")
-    private let commandRunner: CommandRunner
     private let logger: LoggingService
     private let debugEnabledProvider: () -> Bool
 
     init(
-        commandRunner: CommandRunner,
         logger: LoggingService,
         debugEnabledProvider: @escaping () -> Bool
     ) {
-        self.commandRunner = commandRunner
         self.logger = logger
         self.debugEnabledProvider = debugEnabledProvider
     }
@@ -35,6 +32,11 @@ final class NetworkContextService: ObservableObject {
         }
     }
 
+    func stop() {
+        monitor.pathUpdateHandler = nil
+        monitor.cancel()
+    }
+
     deinit {
         monitor.cancel()
     }
@@ -42,13 +44,15 @@ final class NetworkContextService: ObservableObject {
     func refreshContext(pathStatus: NWPath.Status? = nil, path activePath: NWPath? = nil) async {
         let path = activePath ?? monitor.currentPath
         let connected = (pathStatus ?? path.status) == .satisfied
-        let routeData = (try? await commandRunner.run(
-            launchPath: "/usr/sbin/route",
-            arguments: ["-n", "get", "default"],
-            timeoutMs: 1_000
-        ))?.output ?? ""
-        var interfaceName = parseInterface(routeData)
-        var gateway = Self.normalizedIPv4Gateway(parseGateway(routeData))
+
+        let global = NativeNetworkConfiguration.globalIPv4FromStore()
+        var interfaceName = global.interface?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var gateway = Self.normalizedIPv4Gateway(global.router)
+
+        if interfaceName == nil {
+            interfaceName = sysctlDefaultRouteInterfaceName()
+        }
+
         var interfaceType = inferInterfaceType(interfaceName)
 
         if let nw = matchingNWInterface(name: interfaceName, path: path) {
@@ -58,19 +62,18 @@ final class NetworkContextService: ObservableObject {
             interfaceType = describeNWInterfaceType(primary.type)
         }
 
-        let localIP = await localIPForInterface(interfaceName)
         if let ifn = interfaceName {
             if gateway == nil {
-                gateway = await gatewayFromIpconfigRouter(interface: ifn)
+                gateway = Self.normalizedIPv4Gateway(NativeNetworkConfiguration.routerFromServiceIPv4(bsdInterface: ifn))
             }
             if gateway == nil {
-                gateway = await gatewayFromNetstatDefault(interface: ifn)
-            }
-            if gateway == nil {
-                gateway = await gatewayFromRouteGet(host: "1.1.1.1")
+                let sysctl = NativeNetworkConfiguration.defaultIPv4GatewaysViaSysctl(preferredInterface: ifn)
+                gateway = Self.normalizedIPv4Gateway(sysctl.preferred) ?? Self.normalizedIPv4Gateway(sysctl.any)
             }
         }
-        let dnsServers = await resolveDNSServers(interfaceBSDName: interfaceName)
+
+        let localIP = localIPForInterface(interfaceName)
+        let dnsServers = resolveDNSServers(interfaceBSDName: interfaceName)
 
         context = NetworkContext(
             connected: connected,
@@ -86,6 +89,10 @@ final class NetworkContextService: ObservableObject {
             "Context refreshed connected=\(connected) interface=\(interfaceName ?? "-") ip=\(localIP ?? "-") gateway=\(gateway ?? "-") dns=\(dnsServers.joined(separator: ","))",
             enabled: debugEnabledProvider()
         )
+    }
+
+    private func sysctlDefaultRouteInterfaceName() -> String? {
+        NativeNetworkConfiguration.defaultRouteInterfaceNameFromSysctl()
     }
 
     private func matchingNWInterface(name: String?, path: NWPath) -> NWInterface? {
@@ -131,51 +138,6 @@ final class NetworkContextService: ObservableObject {
         }
     }
 
-    private func parseInterface(_ route: String) -> String? {
-        Self.parseValue(in: route, prefix: "interface:")
-    }
-
-    private func parseGateway(_ route: String) -> String? {
-        Self.parseValue(in: route, prefix: "gateway:")
-    }
-
-    /// Default route row from `netstat -rn -f inet` (IPv4 gateway on the active interface).
-    private func gatewayFromNetstatDefault(interface: String) async -> String? {
-        guard let result = try? await commandRunner.run(
-            launchPath: "/usr/sbin/netstat",
-            arguments: ["-rn", "-f", "inet"],
-            timeoutMs: 1_500
-        ) else {
-            return nil
-        }
-        return Self.parseDefaultGatewayFromNetstat(output: result.output, preferredInterface: interface)
-    }
-
-    /// `route -n get <host>` often still reports a usable IPv4 `gateway:` when `route get default` does not.
-    private func gatewayFromRouteGet(host: String) async -> String? {
-        guard let result = try? await commandRunner.run(
-            launchPath: "/usr/sbin/route",
-            arguments: ["-n", "get", host],
-            timeoutMs: 1_000
-        ) else {
-            return nil
-        }
-        return Self.normalizedIPv4Gateway(Self.parseValue(in: result.output, prefix: "gateway:"))
-    }
-
-    /// `route -n get default` often omits an IPv4 gateway on relay / iCloud Private Relay paths; `ipconfig` still reports the router.
-    private func gatewayFromIpconfigRouter(interface: String) async -> String? {
-        guard let result = try? await commandRunner.run(
-            launchPath: "/usr/sbin/ipconfig",
-            arguments: ["getoption", interface, "router"],
-            timeoutMs: 1_000
-        ) else {
-            return nil
-        }
-        let value = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Self.normalizedIPv4Gateway(value)
-    }
-
     private static func normalizedIPv4Gateway(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -186,39 +148,10 @@ final class NetworkContextService: ObservableObject {
         return trimmed
     }
 
-    private static func parseValue(in output: String, prefix: String) -> String? {
-        for line in output.split(separator: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix(prefix) {
-                return trimmed.replacingOccurrences(of: prefix, with: "")
-                    .trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return nil
-    }
-
-    /// Picks IPv4 gateway from `default` rows; prefers the row whose `Netif` matches `preferredInterface`.
-    private static func parseDefaultGatewayFromNetstat(output: String, preferredInterface: String) -> String? {
-        var anyGateway: String?
-        for line in output.split(separator: "\n") {
-            let s = String(line)
-            let parts = s.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-            guard parts.first == "default", parts.count >= 3 else { continue }
-            let gwCandidate = parts[1]
-            guard let gw = normalizedIPv4Gateway(gwCandidate) else { continue }
-            if parts.contains(preferredInterface) {
-                return gw
-            }
-            if anyGateway == nil {
-                anyGateway = gw
-            }
-        }
-        return anyGateway
-    }
-
     /// Resolver IPs from **SystemConfiguration** (`SCDynamicStore`, same source as `scutil --dns`), then
-    /// `networksetup -getdnsservers` if the store lists only loopback or is empty.
-    private func resolveDNSServers(interfaceBSDName: String?) async -> [String] {
+    /// manual DNS from the active **network set** (parity with `networksetup -getdnsservers`) when only
+    /// loopback appears in the dynamic store.
+    private func resolveDNSServers(interfaceBSDName: String?) -> [String] {
         let raw = SystemDNSConfiguration.orderedNameserverAddresses(interfaceHint: interfaceBSDName)
         let nonLoopback = raw.filter { !["127.0.0.1", "0.0.0.0", "::1"].contains($0) }
         if !nonLoopback.isEmpty {
@@ -227,11 +160,11 @@ final class NetworkContextService: ObservableObject {
         guard let bsd = interfaceBSDName else {
             return raw
         }
-        guard let fromSetup = await dnsServersFromNetworkSetup(interfaceBSDName: bsd) else {
+        guard let fromPrefs = NativeNetworkConfiguration.manualDNSServersFromPreferences(bsdInterface: bsd) else {
             return raw
         }
-        if !fromSetup.isEmpty {
-            return fromSetup.map { Self.attachInterfaceZoneToLinkLocalIPv6($0, interfaceBSDName: bsd) }
+        if !fromPrefs.isEmpty {
+            return fromPrefs.map { Self.attachInterfaceZoneToLinkLocalIPv6($0, interfaceBSDName: bsd) }
         }
         return []
     }
@@ -275,7 +208,6 @@ final class NetworkContextService: ObservableObject {
         return ordered
     }
 
-    /// `if_index : 12 (en0)` or `if_index : 12` — returns the numeric interface index for `sin6_scope_id`.
     private static func parseScutilIfIndexLine(_ line: String) -> UInt32? {
         guard line.hasPrefix("if_index") else { return nil }
         guard let colon = line.firstIndex(of: ":") else { return nil }
@@ -307,58 +239,11 @@ final class NetworkContextService: ObservableObject {
         let unzoned = stripZoneIndex(value.trimmingCharacters(in: .whitespacesAndNewlines))
         var addr = in6_addr()
         guard unzoned.withCString({ inet_pton(AF_INET6, $0, &addr) == 1 }) else { return false }
-        // fe80::/10 (RFC 4291 link-local); Swift cannot use IN6_IS_ADDR_LINKLOCAL macro here.
         return withUnsafeBytes(of: &addr) { raw in
             let p = raw.bindMemory(to: UInt8.self)
             guard p.count >= 2 else { return false }
             return p[0] == 0xfe && (p[1] & 0xc0) == 0x80
         }
-    }
-
-    private func dnsServersFromNetworkSetup(interfaceBSDName: String) async -> [String]? {
-        guard let serviceName = await networkSetupHardwarePortName(device: interfaceBSDName) else { return nil }
-        guard let result = try? await commandRunner.run(
-            launchPath: "/usr/sbin/networksetup",
-            arguments: ["-getdnsservers", serviceName],
-            timeoutMs: 2_000
-        ) else {
-            return nil
-        }
-        let text = result.output.lowercased()
-        if text.contains("aren't any dns") || text.contains("there aren't any") {
-            return []
-        }
-        var servers: [String] = []
-        for line in result.output.split(separator: "\n") {
-            let t = line.trimmingCharacters(in: .whitespaces)
-            guard Self.isIPLiteral(t) else { continue }
-            servers.append(Self.attachInterfaceZoneToLinkLocalIPv6(t, interfaceBSDName: interfaceBSDName))
-        }
-        return servers
-    }
-
-    private func networkSetupHardwarePortName(device: String) async -> String? {
-        guard let result = try? await commandRunner.run(
-            launchPath: "/usr/sbin/networksetup",
-            arguments: ["-listallhardwareports"],
-            timeoutMs: 2_000
-        ) else {
-            return nil
-        }
-        var currentPortName: String?
-        for line in result.output.split(separator: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("Hardware Port:") {
-                currentPortName = trimmed
-                    .replacingOccurrences(of: "Hardware Port:", with: "")
-                    .trimmingCharacters(in: .whitespaces)
-            } else if trimmed.hasPrefix("Device:") {
-                let dev = trimmed.replacingOccurrences(of: "Device:", with: "")
-                    .trimmingCharacters(in: .whitespaces)
-                if dev == device { return currentPortName }
-            }
-        }
-        return nil
     }
 
     private static func isIPv4Address(_ value: String) -> Bool {
@@ -383,29 +268,12 @@ final class NetworkContextService: ObservableObject {
         isIPv4Address(value) || isIPv6Literal(value)
     }
 
-    private func localIPForInterface(_ interface: String?) async -> String? {
+    private func localIPForInterface(_ interface: String?) -> String? {
         guard let interface else { return nil }
-        if let ip = await ipconfigIPv4(for: interface) {
-            return ip
-        }
-        // `ipconfig getifaddr` often returns nothing with iCloud Private Relay / “Limit IP Address
-        // Tracking” enabled, while `getifaddrs` still reports the interface IPv4 (e.g. 192.0.0.2).
         return Self.ipv4FromGetifaddrs(interfaceName: interface)
     }
 
-    private func ipconfigIPv4(for interface: String) async -> String? {
-        guard let result = try? await commandRunner.run(
-            launchPath: "/usr/sbin/ipconfig",
-            arguments: ["getifaddr", interface],
-            timeoutMs: 1_000
-        ) else {
-            return nil
-        }
-        let ip = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ip.isEmpty ? nil : ip
-    }
-
-    /// Enumerates kernel interface addresses; complements `ipconfig getifaddr` for relay / privacy modes.
+    /// Enumerates kernel interface addresses (parity with `ipconfig getifaddr` plus relay / privacy cases).
     private static func ipv4FromGetifaddrs(interfaceName: String) -> String? {
         var head: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&head) == 0, let first = head else { return nil }
@@ -456,5 +324,4 @@ final class NetworkContextService: ObservableObject {
         if name.hasPrefix("utun") { return "VPN" }
         return "Other"
     }
-
 }
