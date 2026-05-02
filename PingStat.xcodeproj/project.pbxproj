@@ -13,7 +13,7 @@
 		237A4EE84D9A068A437F1D20 /* PingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AB7191F31285389A822CB4C /* PingService.swift */; };
 		24E7C5B9AB6DD2F7B8946ADA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EC8C7B63BFCA68292C877C /* AppDelegate.swift */; };
 		342E0FD91394B57F2EDF728E /* AppBranding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62533DA3EADB1D3A524886AF /* AppBranding.swift */; };
-		C91E8A4D2B103F958C01D501 /* ConnectivityProbePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82F9B5E3C214E069D12E602 /* ConnectivityProbePolicy.swift */; };
+		3B6EE8F747DF3C7FED6DFE23 /* ConnectivityProbePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */; };
 		45EEC788693127CBB984774C /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF8C65BB3FD743DF2057DBF /* StatusItemController.swift */; };
 		4D49E6B5943F2ECA2513AB0F /* NetworkContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE9821CF1ADB08D747D80A8 /* NetworkContextService.swift */; };
 		7495C1A251433E7B0CBFCF92 /* LoginItemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */; };
@@ -58,13 +58,13 @@
 		4733B571641CE69A059B04A8 /* DebugExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugExportService.swift; sourceTree = "<group>"; };
 		479FE9B23D7273D786A96087 /* StatusPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusPopoverView.swift; sourceTree = "<group>"; };
 		62533DA3EADB1D3A524886AF /* AppBranding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBranding.swift; sourceTree = "<group>"; };
-		D82F9B5E3C214E069D12E602 /* ConnectivityProbePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityProbePolicy.swift; sourceTree = "<group>"; };
 		70073510CB9A14E301BA63F9 /* DNSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSService.swift; sourceTree = "<group>"; };
 		74D5E7E1250837BE6A66018C /* ICMPPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICMPPing.swift; sourceTree = "<group>"; };
 		76873EC3FE57B386B3BC9D81 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		796AA9EB01C60F878051F32A /* PingStat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PingStat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		977DCB59E911BDE414C16FDD /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A1659AE96406BFC6A44FFA3D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityProbePolicy.swift; sourceTree = "<group>"; };
 		BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSUDPQuery.swift; sourceTree = "<group>"; };
 		BF70C8573F7B6164AFAAD15D /* NetworkMonitorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitorViewModel.swift; sourceTree = "<group>"; };
 		C6EC8C7B63BFCA68292C877C /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -147,7 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				62533DA3EADB1D3A524886AF /* AppBranding.swift */,
-				D82F9B5E3C214E069D12E602 /* ConnectivityProbePolicy.swift */,
+				BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */,
 				BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */,
 				74D5E7E1250837BE6A66018C /* ICMPPing.swift */,
 				2AB8B91345867389E5154295 /* NativeNetworkConfiguration.swift */,
@@ -259,8 +259,8 @@
 			files = (
 				342E0FD91394B57F2EDF728E /* AppBranding.swift in Sources */,
 				F87DBBCA907F0E2C79F0AC7C /* AppConfig.swift in Sources */,
-				C91E8A4D2B103F958C01D501 /* ConnectivityProbePolicy.swift in Sources */,
 				24E7C5B9AB6DD2F7B8946ADA /* AppDelegate.swift in Sources */,
+				3B6EE8F747DF3C7FED6DFE23 /* ConnectivityProbePolicy.swift in Sources */,
 				B5B32EE8F5DCACD1BD719048 /* DNSService.swift in Sources */,
 				1CB51DC3ABC4DDA6736216D4 /* DNSUDPQuery.swift in Sources */,
 				ADAB9B85F49BADE550D1EDF1 /* DebugExportService.swift in Sources */,

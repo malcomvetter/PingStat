@@ -40,12 +40,15 @@ struct AppConfig: Codable, Equatable {
     var dnsIntervalMs: Double
     /// ICMP ping and DNS query timeout in milliseconds.
     var pingTimeoutMs: Double
+    /// Hostname used for UDP DNS probes (A record) against each resolver.
+    var dnsProbeHostname: String
     var degradedThresholdMs: Double
     var healthyThresholdMs: Double
     var blazingThresholdMs: Double
-    var antiFlapEnterCount: Int
-    var antiFlapRecoverCount: Int
-    var minimumStateDwellSeconds: Double
+    /// How many probe rounds in a row must agree before the menu bar health status changes (replaces separate downgrade/recover counts).
+    var statusChangeConfirmationCount: Int
+    /// Minimum time after a status change before another change can take effect (reduces rapid flip-flop).
+    var minimumSecondsBetweenStatusChanges: Double
     var notificationCooldownSeconds: Double
     var showNotificationsEnabled: Bool
     var debugLoggingEnabled: Bool
@@ -66,13 +69,13 @@ struct AppConfig: Codable, Equatable {
         pingIntervalMs: 1_000,
         dnsIntervalMs: 30_000,
         pingTimeoutMs: 1_000,
+        dnsProbeHostname: "captive.apple.com",
         degradedThresholdMs: 150,
         healthyThresholdMs: 60,
         blazingThresholdMs: 30,
-        antiFlapEnterCount: 2,
-        antiFlapRecoverCount: 3,
-        minimumStateDwellSeconds: 10,
-        notificationCooldownSeconds: 60,
+        statusChangeConfirmationCount: 4,
+        minimumSecondsBetweenStatusChanges: 10,
+        notificationCooldownSeconds: 120,
         showNotificationsEnabled: true,
         debugLoggingEnabled: false,
         launchAtLoginEnabled: false,
@@ -96,8 +99,10 @@ struct AppConfig: Codable, Equatable {
         case blazingThresholdMs
         case blazingWanThresholdMs
         case blazingGatewayThresholdMs
+        case statusChangeConfirmationCount
         case antiFlapEnterCount
         case antiFlapRecoverCount
+        case minimumSecondsBetweenStatusChanges
         case minimumStateDwellSeconds
         case notificationCooldownSeconds
         case showNotificationsEnabled
@@ -109,18 +114,19 @@ struct AppConfig: Codable, Equatable {
         case pingLevel3Enabled
         case pingQuad9Enabled
         case customTarget
+        case dnsProbeHostname
     }
 
     init(
         pingIntervalMs: Double,
         dnsIntervalMs: Double,
         pingTimeoutMs: Double,
+        dnsProbeHostname: String,
         degradedThresholdMs: Double,
         healthyThresholdMs: Double,
         blazingThresholdMs: Double,
-        antiFlapEnterCount: Int,
-        antiFlapRecoverCount: Int,
-        minimumStateDwellSeconds: Double,
+        statusChangeConfirmationCount: Int,
+        minimumSecondsBetweenStatusChanges: Double,
         notificationCooldownSeconds: Double,
         showNotificationsEnabled: Bool,
         debugLoggingEnabled: Bool,
@@ -135,12 +141,12 @@ struct AppConfig: Codable, Equatable {
         self.pingIntervalMs = pingIntervalMs
         self.dnsIntervalMs = dnsIntervalMs
         self.pingTimeoutMs = pingTimeoutMs
+        self.dnsProbeHostname = dnsProbeHostname
         self.degradedThresholdMs = degradedThresholdMs
         self.healthyThresholdMs = healthyThresholdMs
         self.blazingThresholdMs = blazingThresholdMs
-        self.antiFlapEnterCount = antiFlapEnterCount
-        self.antiFlapRecoverCount = antiFlapRecoverCount
-        self.minimumStateDwellSeconds = minimumStateDwellSeconds
+        self.statusChangeConfirmationCount = statusChangeConfirmationCount
+        self.minimumSecondsBetweenStatusChanges = minimumSecondsBetweenStatusChanges
         self.notificationCooldownSeconds = notificationCooldownSeconds
         self.showNotificationsEnabled = showNotificationsEnabled
         self.debugLoggingEnabled = debugLoggingEnabled
@@ -178,6 +184,14 @@ struct AppConfig: Codable, Equatable {
         } else {
             pingTimeoutMs = Self.defaults.pingTimeoutMs
         }
+
+        if let raw = try c.decodeIfPresent(String.self, forKey: .dnsProbeHostname) {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            dnsProbeHostname = trimmed.isEmpty ? Self.defaults.dnsProbeHostname : trimmed
+        } else {
+            dnsProbeHostname = Self.defaults.dnsProbeHostname
+        }
+
         degradedThresholdMs = try c.decodeIfPresent(Double.self, forKey: .degradedThresholdMs) ?? Self.defaults.degradedThresholdMs
         healthyThresholdMs = try c.decodeIfPresent(Double.self, forKey: .healthyThresholdMs) ?? Self.defaults.healthyThresholdMs
         if let b = try c.decodeIfPresent(Double.self, forKey: .blazingThresholdMs) {
@@ -188,9 +202,20 @@ struct AppConfig: Codable, Equatable {
             blazingThresholdMs = Self.defaults.blazingThresholdMs
         }
         _ = try c.decodeIfPresent(Double.self, forKey: .blazingGatewayThresholdMs)
-        antiFlapEnterCount = try c.decodeIfPresent(Int.self, forKey: .antiFlapEnterCount) ?? Self.defaults.antiFlapEnterCount
-        antiFlapRecoverCount = try c.decodeIfPresent(Int.self, forKey: .antiFlapRecoverCount) ?? Self.defaults.antiFlapRecoverCount
-        minimumStateDwellSeconds = try c.decodeIfPresent(Double.self, forKey: .minimumStateDwellSeconds) ?? Self.defaults.minimumStateDwellSeconds
+        if let v = try c.decodeIfPresent(Int.self, forKey: .statusChangeConfirmationCount) {
+            statusChangeConfirmationCount = max(1, v)
+        } else {
+            let enter = try c.decodeIfPresent(Int.self, forKey: .antiFlapEnterCount) ?? Self.defaults.statusChangeConfirmationCount
+            let recover = try c.decodeIfPresent(Int.self, forKey: .antiFlapRecoverCount) ?? Self.defaults.statusChangeConfirmationCount
+            statusChangeConfirmationCount = max(1, max(enter, recover))
+        }
+
+        if let v = try c.decodeIfPresent(Double.self, forKey: .minimumSecondsBetweenStatusChanges) {
+            minimumSecondsBetweenStatusChanges = max(0, v)
+        } else {
+            minimumSecondsBetweenStatusChanges = try c.decodeIfPresent(Double.self, forKey: .minimumStateDwellSeconds)
+                ?? Self.defaults.minimumSecondsBetweenStatusChanges
+        }
         notificationCooldownSeconds = try c.decodeIfPresent(Double.self, forKey: .notificationCooldownSeconds) ?? Self.defaults.notificationCooldownSeconds
         showNotificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .showNotificationsEnabled) ?? Self.defaults.showNotificationsEnabled
         debugLoggingEnabled = try c.decodeIfPresent(Bool.self, forKey: .debugLoggingEnabled) ?? Self.defaults.debugLoggingEnabled
@@ -208,12 +233,12 @@ struct AppConfig: Codable, Equatable {
         try c.encode(pingIntervalMs, forKey: .pingIntervalMs)
         try c.encode(dnsIntervalMs, forKey: .dnsIntervalMs)
         try c.encode(pingTimeoutMs, forKey: .pingTimeoutMs)
+        try c.encode(dnsProbeHostname, forKey: .dnsProbeHostname)
         try c.encode(degradedThresholdMs, forKey: .degradedThresholdMs)
         try c.encode(healthyThresholdMs, forKey: .healthyThresholdMs)
         try c.encode(blazingThresholdMs, forKey: .blazingThresholdMs)
-        try c.encode(antiFlapEnterCount, forKey: .antiFlapEnterCount)
-        try c.encode(antiFlapRecoverCount, forKey: .antiFlapRecoverCount)
-        try c.encode(minimumStateDwellSeconds, forKey: .minimumStateDwellSeconds)
+        try c.encode(statusChangeConfirmationCount, forKey: .statusChangeConfirmationCount)
+        try c.encode(minimumSecondsBetweenStatusChanges, forKey: .minimumSecondsBetweenStatusChanges)
         try c.encode(notificationCooldownSeconds, forKey: .notificationCooldownSeconds)
         try c.encode(showNotificationsEnabled, forKey: .showNotificationsEnabled)
         try c.encode(debugLoggingEnabled, forKey: .debugLoggingEnabled)
@@ -228,8 +253,27 @@ struct AppConfig: Codable, Equatable {
 }
 
 extension AppConfig {
+    /// Trims whitespace; falls back to default if empty or unreasonably long.
+    var sanitizedDNSProbeHostname: String {
+        let t = dnsProbeHostname.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, t.count <= 253 else { return Self.defaults.dnsProbeHostname }
+        return t
+    }
+
+    /// Enabled public resolver rows (ICMP + DNS use the same set).
+    var enabledWanResolverTargets: [(kind: EndpointKind, host: String)] {
+        var rows: [(EndpointKind, String)] = []
+        if pingCloudflareEnabled { rows.append((.cloudflare, "1.1.1.1")) }
+        if pingGoogleEnabled { rows.append((.google, "8.8.8.8")) }
+        if pingOpenDNSEnabled { rows.append((.openDNS, "208.67.220.220")) }
+        if pingLevel3Enabled { rows.append((.level3, "4.2.2.1")) }
+        if pingQuad9Enabled { rows.append((.quad9, "9.9.9.9")) }
+        return rows
+    }
+
+    /// Public DNS IPs used as UDP probe fallbacks (same order as enabled WAN ICMP targets).
     var fallbackDNSServers: [String] {
-        ["1.1.1.1", "8.8.8.8", "208.67.220.220", "4.2.2.1", "9.9.9.9"]
+        enabledWanResolverTargets.map(\.host)
     }
 
     /// Seconds between ping rounds (for `Task.sleep`).

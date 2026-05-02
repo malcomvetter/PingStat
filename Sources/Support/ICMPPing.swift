@@ -15,9 +15,9 @@ enum ICMPPing {
     private static let echoRequestType: UInt8 = 8
     private static let echoReplyType: UInt8 = 0
 
-    /// Sends one ICMP echo request and measures RTT. Blocking socket IO runs off the caller actor.
+    /// Sends one ICMP echo request and measures RTT. Blocking socket IO runs on a child task so cancellation can propagate from the ping loop.
     static func echo(host: String, timeoutMs: Int) async throws -> Double {
-        try await Task.detached(priority: .utility) {
+        try await Task(priority: .utility) { @Sendable in
             try echoSync(host: host, timeoutMs: timeoutMs)
         }.value
     }

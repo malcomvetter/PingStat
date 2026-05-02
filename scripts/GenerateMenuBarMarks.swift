@@ -15,18 +15,7 @@ enum MarkKind: String, CaseIterable {
     case offline
 
     var overlaySymbolName: String? {
-        switch self {
-        case .startup:
-            return nil
-        case .blazing:
-            return "bolt.fill"
-        case .healthy:
-            return "checkmark.circle.fill"
-        case .degraded:
-            return "line.diagonal"
-        case .offline:
-            return "xmark.circle.fill"
-        }
+        "cellularbars"
     }
 
     var assetBaseName: String {

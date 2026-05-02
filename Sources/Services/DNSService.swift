@@ -5,8 +5,6 @@ struct DNSCheckResult {
 }
 
 final class DNSService {
-    private static let probeHostname = "captive.apple.com"
-
     private let logger: LoggingService
     private let debugEnabledProvider: () -> Bool
 
@@ -19,15 +17,18 @@ final class DNSService {
     }
 
     func check(
+        probeHostname: String,
         configuredServers: [String],
         fallbackServers: [String],
         customNameservers: [String],
         timeoutMs: Int
     ) async -> DNSCheckResult {
+        let hostname = probeHostname.trimmingCharacters(in: .whitespacesAndNewlines)
         let configured = configuredServers.filter { !$0.isEmpty }
         let customFiltered = customNameservers.filter { !$0.isEmpty }
         async let customResponsesTask = resolveAcrossServers(
             servers: customFiltered,
+            hostname: hostname,
             timeoutMs: timeoutMs
         )
 
@@ -38,6 +39,7 @@ final class DNSService {
 
         async let fallbackResponsesTask = resolveAcrossServers(
             servers: fallbackServers,
+            hostname: hostname,
             timeoutMs: timeoutMs
         )
 
@@ -45,6 +47,11 @@ final class DNSService {
             let (fallbackResponses, customResponses) = await (fallbackResponsesTask, customResponsesTask)
             Self.applyFallbackAnswerMap(&status, responses: fallbackResponses)
             Self.applyCustomProbes(&status, responses: customResponses)
+            status.lastResolverDetailLines = Self.mergeProbeLines(
+                configured: [],
+                fallback: fallbackResponses,
+                custom: customResponses
+            )
             status.allConfiguredTimedOut = true
             let fallbackSuccesses = fallbackResponses.filter(\.success)
             status.fallbackWorked = !fallbackSuccesses.isEmpty
@@ -62,6 +69,7 @@ final class DNSService {
 
         async let configuredResponsesTask = resolveAcrossServers(
             servers: configured,
+            hostname: hostname,
             timeoutMs: timeoutMs
         )
         let (configuredResponses, fallbackResponses, customResponses) = await (
@@ -71,6 +79,11 @@ final class DNSService {
         )
         Self.applyFallbackAnswerMap(&status, responses: fallbackResponses)
         Self.applyCustomProbes(&status, responses: customResponses)
+        status.lastResolverDetailLines = Self.mergeProbeLines(
+            configured: configuredResponses,
+            fallback: fallbackResponses,
+            custom: customResponses
+        )
 
         let configuredSuccesses = configuredResponses.filter(\.success)
         let configuredTimeouts = configuredResponses.filter { !$0.success }.map(\.server)
@@ -102,6 +115,14 @@ final class DNSService {
         return DNSCheckResult(status: status)
     }
 
+    private static func mergeProbeLines(
+        configured: [ServerResolution],
+        fallback: [ServerResolution],
+        custom: [ServerResolution]
+    ) -> [String] {
+        configured.map(\.detailLine) + fallback.map(\.detailLine) + custom.map(\.detailLine)
+    }
+
     private static func applyCustomProbes(_ status: inout DNSCheckStatus, responses: [ServerResolution]) {
         for r in responses {
             status.customNameserverProbes[r.server] = r.success
@@ -116,12 +137,13 @@ final class DNSService {
 
     private func resolveAcrossServers(
         servers: [String],
+        hostname: String,
         timeoutMs: Int
     ) async -> [ServerResolution] {
         await withTaskGroup(of: ServerResolution.self, returning: [ServerResolution].self) { group in
             for server in servers {
                 group.addTask {
-                    await self.resolve(server: server, timeoutMs: timeoutMs)
+                    await self.resolve(server: server, hostname: hostname, timeoutMs: timeoutMs)
                 }
             }
 
@@ -133,17 +155,28 @@ final class DNSService {
         }
     }
 
-    private func resolve(server: String, timeoutMs: Int) async -> ServerResolution {
-        let ips = await DNSUDPQuery.resolveA(
-            hostname: Self.probeHostname,
+    private func resolve(server: String, hostname: String, timeoutMs: Int) async -> ServerResolution {
+        let res = await DNSUDPQuery.resolveARecordDetails(
+            hostname: hostname,
             nameserver: server,
             timeoutMs: timeoutMs
         )
-        let filtered = ips.filter { Self.isIPv4($0) }
+        let filtered = res.ipv4Addresses.filter { Self.isIPv4($0) }
+        let success = !filtered.isEmpty
+        let responsePart: String
+        if res.responseCode == nil {
+            responsePart = "no reply (timeout)"
+        } else if !res.answerSummaries.isEmpty {
+            responsePart = res.answerSummaries.joined(separator: "; ")
+        } else {
+            responsePart = "empty answers"
+        }
+        let detailLine = "@\(server) Q A \(hostname) → \(responsePart)"
         return ServerResolution(
             server: server,
-            success: !filtered.isEmpty,
-            ips: filtered
+            success: success,
+            ips: filtered,
+            detailLine: detailLine
         )
     }
 
@@ -166,4 +199,5 @@ private struct ServerResolution {
     let server: String
     let success: Bool
     let ips: [String]
+    let detailLine: String
 }
