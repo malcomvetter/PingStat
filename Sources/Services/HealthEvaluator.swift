@@ -88,16 +88,12 @@ final class HealthEvaluator {
             return (.offline, "No local connectivity")
         }
 
-        let gateway = input.endpointStatuses[.gateway]
-        let cloudflare = input.endpointStatuses[.cloudflare]
-        let google = input.endpointStatuses[.google]
-
         if input.dnsStatus.allConfiguredTimedOut && !input.dnsStatus.fallbackWorked {
             return (.offline, "DNS timed out on all servers")
         }
 
-        if allCorePingsTimedOut(gateway: gateway, cloudflare: cloudflare, google: google) {
-            return (.offline, "Gateway, Cloudflare, and Google timed out")
+        if allMonitoredPingsTimedOut(endpointStatuses: input.endpointStatuses) {
+            return (.offline, "All monitored endpoints timed out")
         }
 
         if input.dnsStatus.resolvedPrivateIP {
@@ -105,73 +101,48 @@ final class HealthEvaluator {
         }
 
         if input.dnsStatus.allConfiguredTimedOut && input.dnsStatus.fallbackWorked {
-            return (.degraded, "Primary DNS filtered; Cloudflare/Google DNS works")
+            return (.degraded, "Primary DNS filtered; public DNS resolvers still work")
         }
 
-        let cloudflareMean = cloudflare?.meanLast5Ms
-        let googleMean = google?.meanLast5Ms
-        if exceedsDegraded(meanMs: cloudflareMean, thresholdMs: input.config.degradedThresholdMs) ||
-            exceedsDegraded(meanMs: googleMean, thresholdMs: input.config.degradedThresholdMs) {
-            return (.degraded, "Cloudflare or Google mean latency above \(Int(input.config.degradedThresholdMs))ms")
+        let wanMeansMs = Self.monitoredPublicResolverMeanMs(from: input)
+        if wanMeansMs.contains(where: { $0 > input.config.degradedThresholdMs }) {
+            return (.degraded, "WAN mean latency above \(Int(input.config.degradedThresholdMs))ms")
         }
 
-        if isBlazing(gatewayMean: gateway?.meanLast5Ms, cloudflareMean: cloudflareMean, googleMean: googleMean, config: input.config) {
-            return (.blazing, "Gateway and WAN latency are excellent")
+        if Self.isBlazing(wanMeansMs: wanMeansMs, config: input.config) {
+            return (.blazing, "WAN latency is excellent")
         }
 
-        if isHealthy(cloudflareMean: cloudflareMean, googleMean: googleMean, config: input.config) {
-            return (.healthy, "Cloudflare and Google means are <= \(Int(input.config.healthyThresholdMs))ms")
+        if Self.isHealthy(wanMeansMs: wanMeansMs, config: input.config) {
+            return (.healthy, "WAN means are <= \(Int(input.config.healthyThresholdMs))ms")
         }
 
         return (.healthy, "Connected with moderate latency")
     }
 
-    private func allCorePingsTimedOut(
-        gateway: EndpointStatus?,
-        cloudflare: EndpointStatus?,
-        google: EndpointStatus?
-    ) -> Bool {
-        let core = [gateway, cloudflare, google]
-        guard core.allSatisfy({ $0?.latest != nil }) else {
-            return false
-        }
-        return core.allSatisfy { status in
-            guard let latest = status?.latest else { return false }
+    private func allMonitoredPingsTimedOut(endpointStatuses: [EndpointKind: EndpointStatus]) -> Bool {
+        let monitors = Array(endpointStatuses.values)
+        guard !monitors.isEmpty else { return false }
+        guard monitors.allSatisfy({ $0.latest != nil }) else { return false }
+        return monitors.allSatisfy { status in
+            guard let latest = status.latest else { return false }
             return latest.timedOut || !latest.success
         }
     }
 
-    private func exceedsDegraded(meanMs: Double?, thresholdMs: Double) -> Bool {
-        guard let meanMs else { return false }
-        return meanMs > thresholdMs
+    /// ICMP mean(5) for each enabled public resolver row (fixed WAN list), omitting unknowns.
+    private static func monitoredPublicResolverMeanMs(from input: HealthEvaluationInput) -> [Double] {
+        let kinds: [EndpointKind] = [.cloudflare, .google, .openDNS, .level3, .quad9]
+        return kinds.compactMap { input.endpointStatuses[$0]?.meanLast5Ms }
     }
 
-    private func isHealthy(cloudflareMean: Double?, googleMean: Double?, config: AppConfig) -> Bool {
-        guard
-            let cloudflareMean,
-            let googleMean
-        else {
-            return false
-        }
-        return cloudflareMean <= config.healthyThresholdMs && googleMean <= config.healthyThresholdMs
+    private static func isHealthy(wanMeansMs: [Double], config: AppConfig) -> Bool {
+        guard !wanMeansMs.isEmpty else { return false }
+        return wanMeansMs.allSatisfy { $0 <= config.healthyThresholdMs }
     }
 
-    private func isBlazing(
-        gatewayMean: Double?,
-        cloudflareMean: Double?,
-        googleMean: Double?,
-        config: AppConfig
-    ) -> Bool {
-        guard
-            let gatewayMean,
-            let cloudflareMean,
-            let googleMean
-        else {
-            return false
-        }
-
-        return gatewayMean < config.blazingGatewayThresholdMs &&
-            cloudflareMean < config.blazingWanThresholdMs &&
-            googleMean < config.blazingWanThresholdMs
+    private static func isBlazing(wanMeansMs: [Double], config: AppConfig) -> Bool {
+        guard !wanMeansMs.isEmpty else { return false }
+        return wanMeansMs.allSatisfy { $0 < config.blazingThresholdMs }
     }
 }

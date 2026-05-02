@@ -28,6 +28,9 @@ enum EndpointKind: String, Codable {
     case gateway
     case cloudflare
     case google
+    case openDNS
+    case level3
+    case quad9
     case custom
 }
 
@@ -69,8 +72,10 @@ struct DNSCheckStatus: Codable, Equatable {
     var fallbackServers: [String] = []
     var resolvedIPs: [String] = []
     var timedOutServers: [String] = []
-    /// Per fallback nameserver (e.g. 1.1.1.1): UDP DNS probe to `captive.apple.com` succeeded.
+    /// Per fallback nameserver (e.g. 1.1.1.1, 8.8.8.8, 208.67.220.220, 4.2.2.1, 9.9.9.9): UDP DNS probe to `captive.apple.com` succeeded.
     var fallbackAnsweredByServer: [String: Bool] = [:]
+    /// Custom target IP(s) when DNS probes are enabled: same probe, keyed by nameserver address.
+    var customNameserverProbes: [String: Bool] = [:]
 }
 
 struct NetworkContext: Codable, Equatable {

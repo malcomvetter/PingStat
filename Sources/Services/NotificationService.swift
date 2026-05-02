@@ -184,7 +184,7 @@ final class NotificationService: NSObject {
         guard shouldSend(key: key, cooldownSeconds: cooldownSeconds) else { return }
         send(
             title: "DNS Filtering Detected",
-            body: "Your network appears to filter DNS. Cloudflare/Google DNS still works."
+            body: "Your network appears to filter DNS. Public DNS fallback resolvers still work."
         )
     }
 

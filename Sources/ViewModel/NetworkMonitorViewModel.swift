@@ -5,9 +5,14 @@ import AppKit
 
 @MainActor
 final class NetworkMonitorViewModel: ObservableObject {
+    /// Same window as health notification toasts: status bar icon stays on best health until this elapses after `start()`.
+    private static let healthUIStabilizationDelaySeconds: TimeInterval = 30
+
     @Published private(set) var context: NetworkContext = .empty
     @Published private(set) var endpoints: [EndpointStatus] = []
     @Published private(set) var dnsStatus = DNSCheckStatus()
+    /// One-line summaries of the last DNS probe runs (newest last), max 2, for the endpoint detail UI.
+    @Published private(set) var dnsProbeHistoryLines: [String] = []
     @Published private(set) var snapshot = HealthSnapshot(
         state: .offline,
         reason: "Initializing",
@@ -33,6 +38,14 @@ final class NetworkMonitorViewModel: ObservableObject {
     private var powerModeObserver: NSObjectProtocol?
     private var previousState: NetworkHealthState = .offline
     private var previousDNSFiltering = false
+    /// Health-related notification toasts are suppressed until this time (set in `start()`).
+    private var healthToastsNotBefore: Date?
+    private var lastAppliedShowNotifications: Bool?
+
+    private var statusIconGracePeriodTask: Task<Void, Never>?
+
+    /// When false (initial and for `Self.healthUIStabilizationDelaySeconds` after each `start()`), the status item shows best health instead of `snapshot.state`.
+    @Published private(set) var statusBarIconReflectsLiveHealth = false
 
     init(
         settingsStore: SettingsStore,
@@ -63,7 +76,23 @@ final class NetworkMonitorViewModel: ObservableObject {
 
     func start() {
         logging.log(.info, category: .lifecycle, "Starting network monitor")
-        notificationService.requestAuthorizationIfNeeded()
+        healthToastsNotBefore = Date().addingTimeInterval(Self.healthUIStabilizationDelaySeconds)
+        statusBarIconReflectsLiveHealth = false
+        statusIconGracePeriodTask?.cancel()
+        statusIconGracePeriodTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let deadline = self.healthToastsNotBefore else {
+                self.statusBarIconReflectsLiveHealth = true
+                return
+            }
+            let seconds = max(0, deadline.timeIntervalSinceNow)
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self.statusBarIconReflectsLiveHealth = true
+        }
+        if settingsStore.config.showNotificationsEnabled {
+            notificationService.requestAuthorizationIfNeeded()
+        }
         networkContextService.start()
         rebuildEndpoints()
         observePowerMode()
@@ -72,6 +101,8 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     func stop() {
+        statusIconGracePeriodTask?.cancel()
+        statusIconGracePeriodTask = nil
         pingLoopTask?.cancel()
         dnsLoopTask?.cancel()
         if let powerModeObserver {
@@ -98,14 +129,14 @@ final class NetworkMonitorViewModel: ObservableObject {
         return "\(Int(mean.rounded())) ms"
     }
 
-    func latestStateColor(for state: NetworkHealthState) -> Color {
+    func latestStateColor(for state: NetworkHealthState, colorScheme: ColorScheme) -> Color {
         switch state {
         case .offline:
             return .red
         case .degraded:
             return .orange
         case .healthy, .blazing:
-            return .green
+            return HealthAppearance.successGreen(for: colorScheme)
         }
     }
 
@@ -142,7 +173,15 @@ final class NetworkMonitorViewModel: ObservableObject {
             .sink { [weak self] config in
                 guard let self else { return }
                 self.loginItemService.apply(enabled: config.launchAtLoginEnabled)
-                self.rebuildEndpoints()
+                if config.showNotificationsEnabled, self.lastAppliedShowNotifications == false {
+                    self.notificationService.requestAuthorizationIfNeeded()
+                }
+                self.lastAppliedShowNotifications = config.showNotificationsEnabled
+                // Defer endpoint rebuild: settings TextField bindings update `config` synchronously;
+                // rebuilding `endpoints` here publishes on `self` during the same update and can abort the app.
+                Task { @MainActor [weak self] in
+                    self?.rebuildEndpoints()
+                }
             }
             .store(in: &cancellables)
     }
@@ -206,7 +245,7 @@ final class NetworkMonitorViewModel: ObservableObject {
         }
         guard !targets.isEmpty else { return }
 
-        let timeoutMs = settingsStore.config.pingTimeoutMs
+        let timeoutMs = settingsStore.config.servicePingTimeoutMs
         let responses = await withTaskGroup(of: PingResponse.self, returning: [PingResponse].self) { group in
             for target in targets {
                 group.addTask { [pingService] in
@@ -236,18 +275,29 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     private func runDNSTick() async {
+        let customNameservers: [String] = {
+            guard let t = settingsStore.config.customTarget, t.dnsProbesEnabled else { return [] }
+            let ip = t.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ip.isEmpty ? [] : [ip]
+        }()
         let result = await dnsService.check(
             configuredServers: context.dnsServers,
             fallbackServers: settingsStore.config.fallbackDNSServers,
-            timeoutMs: settingsStore.config.pingTimeoutMs
+            customNameservers: customNameservers,
+            timeoutMs: settingsStore.config.servicePingTimeoutMs
         )
         dnsStatus = result.status
+        recordDNSProbeHistory(result.status)
 
         let shouldNotifyFiltering = result.status.allConfiguredTimedOut && result.status.fallbackWorked
-        if shouldNotifyFiltering, !previousDNSFiltering {
-            notificationService.notifyDNSFiltering(cooldownSeconds: settingsStore.config.notificationCooldownSeconds)
+        if shouldNotifyFiltering {
+            if !previousDNSFiltering, healthToastsPermitted() {
+                notificationService.notifyDNSFiltering(cooldownSeconds: settingsStore.config.notificationCooldownSeconds)
+                previousDNSFiltering = true
+            }
+        } else {
+            previousDNSFiltering = false
         }
-        previousDNSFiltering = shouldNotifyFiltering
         evaluateHealth()
     }
 
@@ -268,13 +318,21 @@ final class NetworkMonitorViewModel: ObservableObject {
                 category: .health,
                 "State changed \(previousState.rawValue) -> \(updated.state.rawValue): \(updated.reason)"
             )
-            notificationService.notifyStateTransition(
-                to: updated.state,
-                reason: updated.reason,
-                cooldownSeconds: settingsStore.config.notificationCooldownSeconds
-            )
+            if healthToastsPermitted() {
+                notificationService.notifyStateTransition(
+                    to: updated.state,
+                    reason: updated.reason,
+                    cooldownSeconds: settingsStore.config.notificationCooldownSeconds
+                )
+            }
             previousState = updated.state
         }
+    }
+
+    private func healthToastsPermitted() -> Bool {
+        guard settingsStore.config.showNotificationsEnabled else { return false }
+        guard let notBefore = healthToastsNotBefore else { return false }
+        return Date() >= notBefore
     }
 
     private func rebuildEndpoints() {
@@ -290,24 +348,61 @@ final class NetworkMonitorViewModel: ObservableObject {
                 latest: nil
             ))
         }
-        newEndpoints.append(EndpointStatus(
-            id: "cloudflare",
-            label: "Cloudflare",
-            host: "1.1.1.1",
-            kind: .cloudflare,
-            meanLast5Ms: nil,
-            last10: [],
-            latest: nil
-        ))
-        newEndpoints.append(EndpointStatus(
-            id: "google",
-            label: "Google",
-            host: "8.8.8.8",
-            kind: .google,
-            meanLast5Ms: nil,
-            last10: [],
-            latest: nil
-        ))
+        if settingsStore.config.pingCloudflareEnabled {
+            newEndpoints.append(EndpointStatus(
+                id: "cloudflare",
+                label: "Cloudflare",
+                host: "1.1.1.1",
+                kind: .cloudflare,
+                meanLast5Ms: nil,
+                last10: [],
+                latest: nil
+            ))
+        }
+        if settingsStore.config.pingGoogleEnabled {
+            newEndpoints.append(EndpointStatus(
+                id: "google",
+                label: "Google",
+                host: "8.8.8.8",
+                kind: .google,
+                meanLast5Ms: nil,
+                last10: [],
+                latest: nil
+            ))
+        }
+        if settingsStore.config.pingOpenDNSEnabled {
+            newEndpoints.append(EndpointStatus(
+                id: "opendns",
+                label: "OpenDNS",
+                host: "208.67.220.220",
+                kind: .openDNS,
+                meanLast5Ms: nil,
+                last10: [],
+                latest: nil
+            ))
+        }
+        if settingsStore.config.pingLevel3Enabled {
+            newEndpoints.append(EndpointStatus(
+                id: "level3",
+                label: "Level3",
+                host: "4.2.2.1",
+                kind: .level3,
+                meanLast5Ms: nil,
+                last10: [],
+                latest: nil
+            ))
+        }
+        if settingsStore.config.pingQuad9Enabled {
+            newEndpoints.append(EndpointStatus(
+                id: "quad9",
+                label: "Quad9",
+                host: "9.9.9.9",
+                kind: .quad9,
+                meanLast5Ms: nil,
+                last10: [],
+                latest: nil
+            ))
+        }
 
         if let customTarget = settingsStore.config.customTarget,
            !customTarget.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -315,7 +410,7 @@ final class NetworkMonitorViewModel: ObservableObject {
             newEndpoints.append(EndpointStatus(
                 id: "custom",
                 label: customTarget.label,
-                host: customTarget.ipAddress,
+                host: customTarget.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines),
                 kind: .custom,
                 meanLast5Ms: nil,
                 last10: [],
@@ -328,7 +423,43 @@ final class NetworkMonitorViewModel: ObservableObject {
     private func computeMeanLast5(_ samples: [PingSample]) -> Double? {
         let recent = Array(samples.suffix(5))
         guard !recent.isEmpty else { return nil }
-        let values = recent.map { $0.rttMs ?? Double(settingsStore.config.pingTimeoutMs) }
+        let values = recent.map { $0.rttMs ?? settingsStore.config.pingTimeoutMs }
         return values.reduce(0, +) / Double(values.count)
+    }
+
+    private func recordDNSProbeHistory(_ status: DNSCheckStatus) {
+        let line = Self.formatDNSProbeHistoryLine(status: status)
+        var next = dnsProbeHistoryLines
+        next.append(line)
+        if next.count > 2 {
+            next.removeFirst(next.count - 2)
+        }
+        dnsProbeHistoryLines = next
+    }
+
+    private static func formatDNSProbeHistoryLine(status: DNSCheckStatus) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        let ts = formatter.string(from: status.lastCheck ?? Date())
+        var parts: [String] = []
+        if status.configuredServers.isEmpty {
+            parts.append("no system resolvers")
+            parts.append(status.fallbackWorked ? "fallback OK" : "fallback fail")
+        } else {
+            parts.append(status.allConfiguredTimedOut ? "system timed out" : "system OK")
+            if status.allConfiguredTimedOut {
+                parts.append(status.fallbackWorked ? "fallback OK" : "fallback fail")
+            }
+        }
+        if status.resolvedPrivateIP {
+            parts.append("private IP answer")
+        }
+        if !status.customNameserverProbes.isEmpty {
+            let summaries = status.customNameserverProbes
+                .map { key, ok in "\(key)=\(ok ? "OK" : "no answer")" }
+                .sorted()
+            parts.append("custom \(summaries.joined(separator: ", "))")
+        }
+        return "\(ts) DNS probe: " + parts.joined(separator: "; ")
     }
 }

@@ -21,20 +21,19 @@ final class StatusItemController: NSObject {
         button.target = self
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        updateStatusIcon(for: viewModel.snapshot.state)
-        viewModel.$snapshot
+        applyStatusBarIcon()
+        Publishers.CombineLatest(viewModel.$snapshot, viewModel.$statusBarIconReflectsLiveHealth)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] snapshot in
-                self?.updateStatusIcon(for: snapshot.state)
+            .sink { [weak self] _, _ in
+                self?.applyStatusBarIcon()
             }
             .store(in: &cancellables)
 
         popover.behavior = .transient
         popover.animates = true
-        popover.contentSize = NSSize(width: 420, height: 400)
-        popover.contentViewController = NSHostingController(
-            rootView: StatusPopoverView(viewModel: viewModel)
-        )
+        let hosting = NSHostingController(rootView: StatusPopoverView(viewModel: viewModel))
+        hosting.sizingOptions = [.intrinsicContentSize]
+        popover.contentViewController = hosting
     }
 
     @objc
@@ -82,6 +81,14 @@ final class StatusItemController: NSObject {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let exportDebugItem = NSMenuItem(
+            title: "Export Debug…",
+            action: #selector(exportDebug),
+            keyEquivalent: ""
+        )
+        exportDebugItem.target = self
+        menu.addItem(exportDebugItem)
+
         let quitItem = NSMenuItem(
             title: "Quit \(AppBranding.productName)",
             action: #selector(quitApp),
@@ -103,6 +110,35 @@ final class StatusItemController: NSObject {
     }
 
     @objc
+    private func exportDebug() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Export"
+        panel.message = "Choose a folder for the debug export."
+        guard panel.runModal() == .OK, let directory = panel.url else { return }
+
+        Task { @MainActor in
+            do {
+                let fileURL = try await viewModel.exportDebugData(to: directory)
+                let alert = NSAlert()
+                alert.messageText = "Debug data exported"
+                alert.informativeText = fileURL.lastPathComponent
+                alert.alertStyle = .informational
+                alert.runModal()
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Export failed"
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
+        }
+    }
+
+    @objc
     private func quitApp() {
         NSApp.terminate(nil)
     }
@@ -117,12 +153,47 @@ final class StatusItemController: NSObject {
         }
     }
 
-    private func updateStatusIcon(for state: NetworkHealthState) {
+    private func applyStatusBarIcon() {
+        let live = viewModel.snapshot.state
+        let startup = !viewModel.statusBarIconReflectsLiveHealth
+        applyStatusBarButton(startupMark: startup, healthForMark: live, liveHealthState: live)
+    }
+
+    private func applyStatusBarButton(startupMark: Bool, healthForMark: NetworkHealthState, liveHealthState: NetworkHealthState) {
         guard let button = statusItem.button else { return }
-        let image = NSImage(systemSymbolName: state.systemImageName, accessibilityDescription: state.title)
+        let axSummary = startupMark ? "Starting up" : liveHealthState.title
+        let image: NSImage?
+        if startupMark {
+            image = Self.templateMarkImage(named: AppBranding.MenuBarMark.startup)
+                ?? NSImage(systemSymbolName: "hourglass", accessibilityDescription: axSummary)
+        } else {
+            let asset = AppBranding.MenuBarMark.healthImageName(for: healthForMark)
+            image = Self.templateMarkImage(named: asset)
+                ?? NSImage(systemSymbolName: Self.filledSystemImageName(for: healthForMark), accessibilityDescription: axSummary)
+        }
         image?.isTemplate = true
         button.image = image
-        button.toolTip = "\(AppBranding.productName): \(state.title)"
+        button.toolTip = "\(AppBranding.productName) - Network \(liveHealthState.title)"
+    }
+
+    private static func templateMarkImage(named name: String) -> NSImage? {
+        guard let base = NSImage(named: name) else { return nil }
+        let image = (base.copy() as? NSImage) ?? base
+        image.isTemplate = true
+        return image
+    }
+
+    private static func filledSystemImageName(for state: NetworkHealthState) -> String {
+        switch state {
+        case .offline:
+            return "xmark.octagon.fill"
+        case .degraded:
+            return "exclamationmark.triangle.fill"
+        case .healthy:
+            return "checkmark.circle.fill"
+        case .blazing:
+            return "bolt.fill"
+        }
     }
 
     private func addDNSStatusItems(to menu: NSMenu) {
@@ -133,7 +204,13 @@ final class StatusItemController: NSObject {
         let primary = primaryDNSRow()
         addStatusMenuRow(to: menu, title: "Primary DNS", detail: primary.detail, state: primary.state)
 
-        for kind in [EndpointKind.cloudflare, EndpointKind.google] {
+        for kind in [
+            EndpointKind.cloudflare,
+            EndpointKind.google,
+            EndpointKind.openDNS,
+            EndpointKind.level3,
+            EndpointKind.quad9
+        ] {
             guard let ep = viewModel.endpoints.first(where: { $0.kind == kind }) else { continue }
             let row = resolverWANMenuRow(ep, compact: true)
             addStatusMenuRow(to: menu, title: ep.label, detail: row.detail, state: row.state)
@@ -153,18 +230,18 @@ final class StatusItemController: NSObject {
 
         var lines: [String] = []
         if dns.resolvedPrivateIP {
-            lines.append("Why: probe hostname resolved to a private IP (captive / filtered response).")
+            lines.append("Probe resolved to a private IP (captive / filtered response).")
         }
         if dns.allConfiguredTimedOut, dns.fallbackWorked {
-            lines.append("Why: system resolver did not answer; Cloudflare/Google DNS probes still work.")
+            lines.append("Local DNS failed; public DNS fallback resolvers still work.")
         }
         if dns.allConfiguredTimedOut, !dns.fallbackWorked, !dns.configuredServers.isEmpty {
-            lines.append("Why: no DNS server answered the probe (offline or blocked).")
+            lines.append("DNS is offline or blocked.")
         }
         if let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty,
            dns.timedOutServers.contains(resolver),
            !lines.contains(where: { $0.contains("system resolver") }) {
-            lines.append("Why: \(resolver) did not respond to the DNS probe.")
+            lines.append("\(resolver) did not respond to DNS query.")
         }
 
         let reason = viewModel.snapshot.reason
@@ -188,7 +265,7 @@ final class StatusItemController: NSObject {
             return ("Waiting for first check…", .pending)
         }
         guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else {
-            return ("Automatic / encrypted (no resolver IPs)", .pending)
+            return ("No resolver IPs", .pending)
         }
         if dns.timedOutServers.contains(resolver) {
             return ("\(resolver) · No answer", .bad)
@@ -288,7 +365,7 @@ final class StatusItemController: NSObject {
 
         var tintColor: NSColor {
             switch self {
-            case .good: return .systemGreen
+            case .good: return HealthAppearance.successGreenNSColor()
             case .bad: return .systemRed
             case .pending: return .secondaryLabelColor
             }
