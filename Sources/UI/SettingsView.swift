@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -16,6 +17,56 @@ struct SettingsView: View {
 
                     Section {
                         Toggle("Enable Debug Logging", isOn: binding(\.debugLoggingEnabled))
+                    }
+
+                    Section("About") {
+                        LabeledContent("Version", value: AppVersion.marketingAndBuild)
+                    }
+
+                    Section("Diagnostics & logs") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(
+                                "PingStat records lifecycle and probe events with Apple’s unified logging (the same subsystem Console.app and Terminal’s log(1) use). Lifecycle lines use the category app.lifecycle; probes use probe.ping, probe.dns, and related categories."
+                            )
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                            Text(
+                                "Enable Debug Logging above for verbose probe detail in that stream. Recent lines are also held in an in-memory ring buffer (about two thousand entries) and embedded in the JSON produced by Export Debug…."
+                            )
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Console filter (subsystem)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Text(AppVersion.consoleSubsystemFilter)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(.primary)
+                                Text(AppVersion.logStreamShellExample)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(.primary)
+                            }
+
+                            HStack(spacing: 12) {
+                                Button("Copy Console filter") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(
+                                        AppVersion.consoleSubsystemFilter,
+                                        forType: .string
+                                    )
+                                }
+                                Button("Open Console…") {
+                                    DiagnosticsUIActions.openConsoleApp()
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
                     }
 
                     Section("Notifications") {
@@ -220,7 +271,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, minHeight: 420)
         }
         .padding(12)
-        .frame(width: 520, height: 704)
+        .frame(width: 520, height: 780)
         .onAppear {
             Task { await viewModel.refreshNotificationBannerHelp() }
         }
@@ -292,5 +343,12 @@ struct SettingsView: View {
                 viewModel.settingsStore.config.customTarget = target
             }
         )
+    }
+}
+
+private enum DiagnosticsUIActions {
+    static func openConsoleApp() {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Console") else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
     }
 }

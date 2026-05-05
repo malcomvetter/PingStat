@@ -52,7 +52,7 @@ final class NetworkMonitorViewModel: ObservableObject {
 
     init(
         settingsStore: SettingsStore,
-        logging: LoggingService = LoggingService()
+        logging: LoggingService = .shared
     ) {
         self.settingsStore = settingsStore
         self.logging = logging
@@ -76,7 +76,12 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     func start() {
-        logging.log(.info, category: .lifecycle, "Starting network monitor")
+        let c = settingsStore.config
+        logging.log(
+            .notice,
+            category: .lifecycle,
+            "event=monitor_start ping_interval_ms=\(Int(c.pingIntervalMs)) dns_interval_ms=\(Int(c.dnsIntervalMs)) notifications=\(c.showNotificationsEnabled) debug_file_logging=\(c.debugLoggingEnabled)"
+        )
         healthToastsNotBefore = Date().addingTimeInterval(Self.healthUIStabilizationDelaySeconds)
         statusBarIconReflectsLiveHealth = false
         statusIconGracePeriodTask?.cancel()
@@ -102,6 +107,7 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     func stop() {
+        logging.log(.notice, category: .lifecycle, "event=monitor_stop phase=begin")
         coalesceHealthEvaluationItem?.cancel()
         coalesceHealthEvaluationItem = nil
         statusIconGracePeriodTask?.cancel()
@@ -115,6 +121,7 @@ final class NetworkMonitorViewModel: ObservableObject {
             NotificationCenter.default.removeObserver(powerModeObserver)
             self.powerModeObserver = nil
         }
+        logging.log(.notice, category: .lifecycle, "event=monitor_stop phase=end")
     }
 
     func refreshNotificationBannerHelp() async {

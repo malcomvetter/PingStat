@@ -49,12 +49,15 @@ actor LogRingBuffer {
 }
 
 final class LoggingService {
+    /// Process-wide logger and ring buffer (menu bar apps should not create multiple buffers per launch).
+    static let shared = LoggingService()
+
     private let subsystem: String
     private let ringBuffer: LogRingBuffer
     private var cachedLoggers: [LogCategory: Logger] = [:]
 
     init(
-        subsystem: String = "com.example.PingStat",
+        subsystem: String = AppVersion.loggingSubsystem,
         ringBuffer: LogRingBuffer = LogRingBuffer()
     ) {
         self.subsystem = subsystem

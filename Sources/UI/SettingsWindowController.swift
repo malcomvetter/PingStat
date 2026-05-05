@@ -12,19 +12,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func show(viewModel: NetworkMonitorViewModel) {
+        let title = "\(AppBranding.productName) v\(AppVersion.marketing) - Settings"
         if let window {
+            window.title = title
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 780),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = AppBranding.settingsWindowTitle
+        window.title = title
         window.center()
         window.contentView = NSHostingView(rootView: SettingsView(viewModel: viewModel))
         window.isReleasedWhenClosed = false

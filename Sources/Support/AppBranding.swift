@@ -59,7 +59,7 @@ enum HealthAppearance {
 
     // MARK: - Status bar / popover health mark (must stay in sync)
 
-    /// SF Symbol for the menu bar and main popover: always `cellularbars`; tint uses ``statusHealthMarkNSColor``.
+    /// SF Symbol for the menu bar and main popover: always `cellularbars`. Live menu bar tint uses palette colors in ``StatusItemController``; startup uses a **template** image there. Popover tint uses ``statusHealthMarkNSColor`` / ``statusHealthMarkColor``.
     static func statusHealthSymbolName(startupMark _: Bool, health _: NetworkHealthState) -> String {
         "cellularbars"
     }
@@ -67,8 +67,8 @@ enum HealthAppearance {
     /// Single palette color for ``statusHealthSymbolName(startupMark:health:)`` — same logic as the status item image.
     static func statusHealthMarkNSColor(startupMark: Bool, health: NetworkHealthState) -> NSColor {
         if startupMark {
-            let darkChrome = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            return darkChrome ? .white : .darkGray
+            // Popover header while stabilizing; menu bar uses a template symbol (``StatusItemController``).
+            return .labelColor
         }
         switch health {
         case .offline:

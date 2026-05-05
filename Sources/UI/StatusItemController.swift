@@ -71,6 +71,13 @@ final class StatusItemController: NSObject {
             stateItem.isEnabled = false
             menu.addItem(stateItem)
         }
+        let versionItem = NSMenuItem(
+            title: "Version \(AppVersion.marketingAndBuild)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
         menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(
@@ -162,15 +169,23 @@ final class StatusItemController: NSObject {
     private func applyStatusBarButton(startupMark: Bool, healthForMark: NetworkHealthState, liveHealthState: NetworkHealthState) {
         guard let button = statusItem.button else { return }
         let axSummary = startupMark ? "Starting up" : liveHealthState.title
-        let color = HealthAppearance.statusHealthMarkNSColor(startupMark: startupMark, health: healthForMark)
         let pointSize: CGFloat = 14
         let baseConfig = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
-        let palette = NSImage.SymbolConfiguration(paletteColors: [color])
-        let combined = baseConfig.applying(palette)
         let symbolName = HealthAppearance.statusHealthSymbolName(startupMark: startupMark, health: healthForMark)
         let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: axSummary)
-        let image = base?.withSymbolConfiguration(combined)
-        image?.isTemplate = false
+
+        let image: NSImage?
+        if startupMark {
+            // Template: system draws the same foreground as other monochrome menu bar extras (light on dark bar, dark on light).
+            image = base?.withSymbolConfiguration(baseConfig)
+            image?.isTemplate = true
+        } else {
+            let color = HealthAppearance.statusHealthMarkNSColor(startupMark: false, health: healthForMark)
+            let palette = NSImage.SymbolConfiguration(paletteColors: [color])
+            let combined = baseConfig.applying(palette)
+            image = base?.withSymbolConfiguration(combined)
+            image?.isTemplate = false
+        }
         button.image = image
         button.toolTip = "\(AppBranding.productName) - Network \(liveHealthState.title)"
     }

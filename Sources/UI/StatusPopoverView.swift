@@ -61,6 +61,7 @@ struct StatusPopoverView: View {
             Divider()
             if let selected = selectedEndpoint {
                 endpointDetail(selected)
+                detailFooterVersionRow
             } else {
                 summaryList
             }
@@ -79,6 +80,14 @@ struct StatusPopoverView: View {
     private var selectedEndpoint: EndpointStatus? {
         guard let selectedEndpointID else { return nil }
         return viewModel.endpoints.first(where: { $0.id == selectedEndpointID })
+    }
+
+    private var detailFooterVersionRow: some View {
+        Text("Version \(AppVersion.marketingAndBuild)")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 2)
     }
 
     private var header: some View {
@@ -215,9 +224,12 @@ struct StatusPopoverView: View {
             pingPart = "—"
         }
         return HStack(alignment: .center, spacing: 8) {
-            Color.clear.frame(width: 34, height: 1)
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: 1)
+            Text("Version \(AppVersion.marketingAndBuild)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity, alignment: .leading)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(dnsPart)
                     .font(.caption.monospacedDigit())
@@ -229,7 +241,6 @@ struct StatusPopoverView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             .fixedSize(horizontal: true, vertical: false)
-            .layoutPriority(1)
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 10)
