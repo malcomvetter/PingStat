@@ -2,8 +2,8 @@
 import AppKit
 import Foundation
 
-/// Renders PingStat.app icons: black canvas, ``cellularbars`` SF Symbol in blazing teal (same as
-/// ``HealthAppearance.blazingAccentNSColor`` in dark menu bar), ``PingStat`` label beneath.
+/// Renders PingStat.app icons: black canvas, centered ``cellularbars`` SF Symbol in blazing teal
+/// (same as ``HealthAppearance.blazingAccentNSColor`` in dark menu bar). No wordmark.
 ///
 /// Run from repo root: `swift scripts/GenerateAppIcon.swift`
 /// Writes `Design/PingStat-app-icon-master.png` and all entries in `Assets.xcassets/AppIcon.appiconset/`.
@@ -21,24 +21,10 @@ func renderMaster(side: CGFloat) -> NSImage {
         rect.fill()
 
         let s = min(rect.width, rect.height)
-        let margin = s * 0.05
-        let fontSize = s * 0.125
-        let font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: teal,
-        ]
-        let title = "PingStat" as NSString
-        let textSize = title.size(withAttributes: attrs)
-        let textX = rect.midX - textSize.width / 2
-        let textY = margin
-        title.draw(at: NSPoint(x: textX, y: textY), withAttributes: attrs)
-
-        let topOfText = textY + textSize.height + s * 0.04
-        let topLimit = rect.height - margin
-        let bandHeight = max(topLimit - topOfText, s * 0.25)
-        // Point size scales with the band; cap so the glyph does not spill past side margins.
-        let pointSize = min(bandHeight * 0.92, rect.width * 0.58)
+        let margin = s * 0.06
+        let inner = min(rect.width - 2 * margin, rect.height - 2 * margin)
+        // Single centered glyph; scale to fit inside margins (matches prior max ~58% of width feel).
+        let pointSize = inner * 0.58
         let symCfg = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
             .applying(NSImage.SymbolConfiguration(paletteColors: [teal]))
         guard let raw = NSImage(systemSymbolName: "cellularbars", accessibilityDescription: nil),
@@ -47,7 +33,7 @@ func renderMaster(side: CGFloat) -> NSImage {
         }
         let symSize = symbol.size
         let symX = rect.midX - symSize.width / 2
-        let symY = topOfText + (topLimit - topOfText - symSize.height) / 2
+        let symY = rect.midY - symSize.height / 2
         symbol.draw(
             in: NSRect(x: symX, y: symY, width: symSize.width, height: symSize.height),
             from: .zero,
