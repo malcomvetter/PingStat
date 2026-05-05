@@ -17,6 +17,7 @@
 		3B6EE8F747DF3C7FED6DFE23 /* ConnectivityProbePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */; };
 		45EEC788693127CBB984774C /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF8C65BB3FD743DF2057DBF /* StatusItemController.swift */; };
 		4D49E6B5943F2ECA2513AB0F /* NetworkContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE9821CF1ADB08D747D80A8 /* NetworkContextService.swift */; };
+		58E5D71759BC7E866330FDDE /* AppResilience.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A67E32634D11BE0DA0201E /* AppResilience.swift */; };
 		7495C1A251433E7B0CBFCF92 /* LoginItemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */; };
 		7AEA30CF82A9255E10186471 /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087999CA710AC77A26F95E9B /* LoggingService.swift */; };
 		8DB85849D87BE22B68E3E1DF /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F6F1CFFDDC4F3E9E6663C87 /* NotificationService.swift */; };
@@ -48,6 +49,7 @@
 /* Begin PBXFileReference section */
 		0444896208B2068A335E7171 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		087999CA710AC77A26F95E9B /* LoggingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingService.swift; sourceTree = "<group>"; };
+		10A67E32634D11BE0DA0201E /* AppResilience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppResilience.swift; sourceTree = "<group>"; };
 		1AB7191F31285389A822CB4C /* PingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingService.swift; sourceTree = "<group>"; };
 		2AB8B91345867389E5154295 /* NativeNetworkConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeNetworkConfiguration.swift; sourceTree = "<group>"; };
 		308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemService.swift; sourceTree = "<group>"; };
@@ -150,6 +152,7 @@
 			isa = PBXGroup;
 			children = (
 				62533DA3EADB1D3A524886AF /* AppBranding.swift */,
+				10A67E32634D11BE0DA0201E /* AppResilience.swift */,
 				BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */,
 				BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */,
 				74D5E7E1250837BE6A66018C /* ICMPPing.swift */,
@@ -275,6 +278,7 @@
 				342E0FD91394B57F2EDF728E /* AppBranding.swift in Sources */,
 				F87DBBCA907F0E2C79F0AC7C /* AppConfig.swift in Sources */,
 				24E7C5B9AB6DD2F7B8946ADA /* AppDelegate.swift in Sources */,
+				58E5D71759BC7E866330FDDE /* AppResilience.swift in Sources */,
 				3B6EE8F747DF3C7FED6DFE23 /* ConnectivityProbePolicy.swift in Sources */,
 				B5B32EE8F5DCACD1BD719048 /* DNSService.swift in Sources */,
 				1CB51DC3ABC4DDA6736216D4 /* DNSUDPQuery.swift in Sources */,
@@ -324,7 +328,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -332,7 +336,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.PingStat;
 				PRODUCT_MODULE_NAME = PingStat;
 				PRODUCT_NAME = PingStat;
@@ -427,7 +431,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -435,7 +439,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.PingStat;
 				PRODUCT_MODULE_NAME = PingStat;
 				PRODUCT_NAME = PingStat;

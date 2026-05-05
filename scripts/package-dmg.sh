@@ -59,17 +59,6 @@ VERSION="$(
 )"
 SAFE_VERSION="${VERSION// /_}"
 
-INSTALL_TXT="$ROOT/dist/INSTALL-dmg.txt"
-cat > "$INSTALL_TXT" <<'EOF'
-PingStat (unsigned build — no Apple Developer ID)
-
-1. Drag “PingStat” onto the “Applications” folder in this window.
-2. Eject the disk image.
-3. First launch: in Finder, open Applications, Control-click PingStat, choose Open, then confirm.
-
-Without Developer ID signing and notarization, Gatekeeper may warn on first open.
-EOF
-
 DMG="$ROOT/dist/PingStat-${SAFE_VERSION}.dmg"
 rm -f "$DMG"
 
@@ -113,7 +102,6 @@ if [[ -f "$CREATE_DMG" ]]; then
     --text-size 12
     --icon "PingStat.app" 150 200
     --hide-extension "PingStat.app"
-    --add-file "INSTALL.txt" "$INSTALL_TXT" 430 310
     --app-drop-link 500 200
     --format UDZO
   )
@@ -150,7 +138,6 @@ if [[ "$USE_LAYOUT" -ne 1 ]]; then
   mkdir -p "$STAGE"
   ditto "$APP" "$STAGE/PingStat.app"
   ln -sf /Applications "$STAGE/Applications"
-  cp "$INSTALL_TXT" "$STAGE/INSTALL.txt"
   create_plain_dmg "$STAGE"
 fi
 

@@ -44,6 +44,9 @@ final class NetworkMonitorViewModel: ObservableObject {
 
     private var statusIconGracePeriodTask: Task<Void, Never>?
 
+    /// Coalesces health evaluation onto the next main-queue turn to avoid publishing during SwiftUI view updates (which can terminate the process).
+    private var coalesceHealthEvaluationItem: DispatchWorkItem?
+
     /// When false (initial and for `Self.healthUIStabilizationDelaySeconds` after each `start()`), the status item shows best health instead of `snapshot.state`.
     @Published private(set) var statusBarIconReflectsLiveHealth = false
 
@@ -99,6 +102,8 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     func stop() {
+        coalesceHealthEvaluationItem?.cancel()
+        coalesceHealthEvaluationItem = nil
         statusIconGracePeriodTask?.cancel()
         statusIconGracePeriodTask = nil
         pingLoopTask?.cancel()
@@ -195,7 +200,7 @@ final class NetworkMonitorViewModel: ObservableObject {
                 if oldGateway != newContext.gatewayIP {
                     self.rebuildEndpoints()
                 }
-                self.evaluateHealth()
+                self.requestHealthEvaluation()
             }
             .store(in: &cancellables)
 
@@ -212,6 +217,7 @@ final class NetworkMonitorViewModel: ObservableObject {
                 // rebuilding `endpoints` here publishes on `self` during the same update and can abort the app.
                 Task { @MainActor [weak self] in
                     self?.rebuildEndpoints()
+                    self?.requestHealthEvaluation()
                 }
             }
             .store(in: &cancellables)
@@ -243,9 +249,9 @@ final class NetworkMonitorViewModel: ObservableObject {
         pingLoopTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                let interval = self.settingsStore.config.adjustedPingInterval(lowPowerMode: self.lowPowerModeEnabled)
                 await self.runPingTick()
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                let interval = self.settingsStore.config.adjustedPingInterval(lowPowerMode: self.lowPowerModeEnabled)
+                await Self.sleepSecondsClamped(interval)
             }
         }
     }
@@ -255,11 +261,19 @@ final class NetworkMonitorViewModel: ObservableObject {
         dnsLoopTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                let interval = self.settingsStore.config.adjustedDNSInterval(lowPowerMode: self.lowPowerModeEnabled)
                 await self.runDNSTick()
-                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                let interval = self.settingsStore.config.adjustedDNSInterval(lowPowerMode: self.lowPowerModeEnabled)
+                await Self.sleepSecondsClamped(interval)
             }
         }
+    }
+
+    /// Avoid `Task.sleep` overflow / absurd intervals from bad prefs.
+    private static func sleepSecondsClamped(_ seconds: Double) async {
+        let clamped = min(max(seconds, 0.001), 86_400)
+        let nanosDouble = min(clamped * 1_000_000_000, Double(UInt64.max))
+        let ns = max(UInt64(1), UInt64(nanosDouble))
+        try? await Task.sleep(nanoseconds: ns)
     }
 
     private func runPingTick() async {
@@ -305,7 +319,7 @@ final class NetworkMonitorViewModel: ObservableObject {
             endpoint.meanLast5Ms = computeMeanLast5(endpoint.last10)
             endpoints[index] = endpoint
         }
-        evaluateHealth()
+        requestHealthEvaluation()
     }
 
     private func runDNSTick() async {
@@ -336,11 +350,36 @@ final class NetworkMonitorViewModel: ObservableObject {
         } else {
             previousDNSFiltering = false
         }
-        evaluateHealth()
+        requestHealthEvaluation()
+    }
+
+    private func requestHealthEvaluation() {
+        coalesceHealthEvaluationItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.evaluateHealth()
+        }
+        coalesceHealthEvaluationItem = item
+        DispatchQueue.main.async(execute: item)
+    }
+
+    /// Builds the endpoint map without trapping on duplicate ``EndpointKind`` (defensive).
+    private func endpointStatusesByKindForHealth() -> [EndpointKind: EndpointStatus] {
+        var map: [EndpointKind: EndpointStatus] = [:]
+        for ep in endpoints {
+            if let existing = map[ep.kind] {
+                logging.log(
+                    .error,
+                    category: .errors,
+                    "Duplicate endpoint kind \(String(describing: ep.kind)) (ids \(existing.id) vs \(ep.id)); using \(ep.id)"
+                )
+            }
+            map[ep.kind] = ep
+        }
+        return map
     }
 
     private func evaluateHealth() {
-        let map = Dictionary(uniqueKeysWithValues: endpoints.map { ($0.kind, $0) })
+        let map = endpointStatusesByKindForHealth()
         let input = HealthEvaluationInput(
             context: context,
             endpointStatuses: map,
