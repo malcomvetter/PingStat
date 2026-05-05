@@ -7,7 +7,7 @@ final class NetworkContextService: ObservableObject {
     @Published private(set) var context: NetworkContext = .empty
 
     private let monitor = NWPathMonitor()
-    private let monitorQueue = DispatchQueue(label: "com.example.PingStat.path")
+    private let monitorQueue = DispatchQueue(label: "org.malcomvetter.PingStat.path")
     private let logger: LoggingService
     private let debugEnabledProvider: () -> Bool
 

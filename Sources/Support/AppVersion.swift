@@ -23,7 +23,7 @@ enum AppVersion {
 
     /// Subsystem string used by ``LoggingService`` and `Logger` (matches bundle id in release builds).
     static var loggingSubsystem: String {
-        Bundle.main.bundleIdentifier ?? "com.example.PingStat"
+        Bundle.main.bundleIdentifier ?? "org.malcomvetter.PingStat"
     }
 
     /// Paste into Console.app’s filter bar to show only this app’s unified logs.
