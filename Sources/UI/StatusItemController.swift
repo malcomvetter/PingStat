@@ -62,34 +62,6 @@ final class StatusItemController: NSObject {
     private func showContextMenu(relativeTo button: NSStatusBarButton) {
         let menu = NSMenu(title: AppBranding.productName)
 
-        let headerItem = NSMenuItem(
-            title: AppBranding.productName,
-            action: nil,
-            keyEquivalent: ""
-        )
-        headerItem.isEnabled = false
-        if #available(macOS 14.4, *) {
-            headerItem.subtitle = "Network \(viewModel.snapshot.state.title)"
-        }
-        menu.addItem(headerItem)
-        if #unavailable(macOS 14.4) {
-            let stateItem = NSMenuItem(
-                title: "Network \(viewModel.snapshot.state.title)",
-                action: nil,
-                keyEquivalent: ""
-            )
-            stateItem.isEnabled = false
-            menu.addItem(stateItem)
-        }
-        let versionItem = NSMenuItem(
-            title: "Version \(AppVersion.marketingAndBuild)",
-            action: nil,
-            keyEquivalent: ""
-        )
-        versionItem.isEnabled = false
-        menu.addItem(versionItem)
-        menu.addItem(.separator())
-
         let settingsItem = NSMenuItem(
             title: "Settings…",
             action: #selector(openSettings),
@@ -116,6 +88,15 @@ final class StatusItemController: NSObject {
 
         menu.addItem(.separator())
         addDNSStatusItems(to: menu)
+
+        menu.addItem(.separator())
+        let versionItem = NSMenuItem(
+            title: "\(AppBranding.productName) Version \(AppVersion.marketingAndBuild)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
 
         let origin = NSPoint(x: button.bounds.midX, y: button.bounds.minY)
         menu.popUp(positioning: nil, at: origin, in: button)
@@ -202,12 +183,16 @@ final class StatusItemController: NSObject {
     }
 
     private func addDNSStatusItems(to menu: NSMenu) {
-        let heading = NSMenuItem(title: "DNS status", action: nil, keyEquivalent: "")
+        let heading = NSMenuItem(
+            title: "Network · \(viewModel.snapshot.state.title)",
+            action: nil,
+            keyEquivalent: ""
+        )
         heading.isEnabled = false
         menu.addItem(heading)
 
-        let primary = primaryDNSRow()
-        addStatusMenuRow(to: menu, title: "Primary DNS", detail: primary.detail, state: primary.state)
+        let local = localNetworkMenuRow(compact: true)
+        addStatusMenuRow(to: menu, title: "Local", detail: local.detail, state: local.state)
 
         for kind in [
             EndpointKind.cloudflare,
@@ -264,32 +249,50 @@ final class StatusItemController: NSObject {
         return lines
     }
 
-    private func primaryDNSRow() -> (detail: String, state: StatusMenuRowState) {
+    /// Middle segment for Local Network row — primary resolver status (popover primary DNS column).
+    private func primaryDNSCompactLabel() -> String {
         let dns = viewModel.dnsStatus
-        guard dns.lastCheck != nil else {
-            return ("Waiting for first check…", .pending)
-        }
+        guard dns.lastCheck != nil else { return "DNS …" }
         guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else {
-            return ("No resolver IPs", .pending)
+            return "DNS —"
         }
         if dns.timedOutServers.contains(resolver) {
-            return ("\(resolver) · No answer", .bad)
+            return "DNS no answer"
         }
-        return ("\(resolver) · OK", .good)
+        return "DNS OK"
+    }
+
+    /// Same layout as WAN rows: `gateway IP · DNS · ICMP` (compact ICMP matches ``resolverWANMenuRow``).
+    private func localNetworkMenuRow(compact: Bool) -> (detail: String, state: StatusMenuRowState) {
+        if let gw = viewModel.endpoints.first(where: { $0.kind == .gateway }) {
+            let dnsPart = primaryDNSCompactLabel()
+            let (icmpPart, icmpState) = icmpSegment(for: gw, compact: compact)
+            let detail = "\(gw.host) · \(dnsPart) · \(icmpPart)"
+            return (detail, icmpState)
+        }
+        let hostPart = viewModel.context.gatewayIP.flatMap { $0.isEmpty ? nil : $0 } ?? "—"
+        let dnsPart = primaryDNSCompactLabel()
+        let detail = "\(hostPart) · \(dnsPart) · —"
+        let state: StatusMenuRowState = viewModel.context.connected ? .pending : .bad
+        return (detail, state)
     }
 
     /// WAN row for the menu. `compact` uses shorter ICMP text so the menu stays short (fewer wrapped lines / less vertical scroll).
     private func resolverWANMenuRow(_ ep: EndpointStatus, compact: Bool = false) -> (detail: String, state: StatusMenuRowState) {
         let dnsPart = dnsProbeLabel(for: ep.host)
+        let (icmpPart, icmpState) = icmpSegment(for: ep, compact: compact)
+        let detail = "\(ep.host) · \(dnsPart) · \(icmpPart)"
+        return (detail, icmpState)
+    }
+
+    private func icmpSegment(for ep: EndpointStatus, compact: Bool) -> (String, StatusMenuRowState) {
         let icmpState = icmpEndpointState(ep)
         let icmpPart: String
         switch icmpState {
         case .good:
-            if compact {
-                icmpPart = viewModel.meanText(for: ep).replacingOccurrences(of: " ", with: "")
-            } else {
-                icmpPart = "ICMP mean(5): \(viewModel.meanText(for: ep))"
-            }
+            icmpPart = compact
+                ? viewModel.meanText(for: ep).replacingOccurrences(of: " ", with: "")
+                : "ICMP mean(5): \(viewModel.meanText(for: ep))"
         case .bad:
             icmpPart = compact
                 ? (ep.latest?.timedOut == true ? "timeout" : "fail")
@@ -297,8 +300,7 @@ final class StatusItemController: NSObject {
         case .pending:
             icmpPart = compact ? "…" : "ICMP …"
         }
-        let detail = "\(ep.host) · \(dnsPart) · \(icmpPart)"
-        return (detail, icmpState)
+        return (icmpPart, icmpState)
     }
 
     /// Joins DNS situation notes into one line, clipped so menu rows stay single-line where possible.
