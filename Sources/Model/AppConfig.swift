@@ -81,9 +81,9 @@ struct AppConfig: Codable, Equatable {
         launchAtLoginEnabled: false,
         pingCloudflareEnabled: true,
         pingGoogleEnabled: true,
-        pingOpenDNSEnabled: true,
-        pingLevel3Enabled: true,
-        pingQuad9Enabled: true,
+        pingOpenDNSEnabled: false,
+        pingLevel3Enabled: false,
+        pingQuad9Enabled: false,
         customTarget: nil
     )
 

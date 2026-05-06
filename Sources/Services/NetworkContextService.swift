@@ -6,7 +6,7 @@ import Network
 final class NetworkContextService: ObservableObject {
     @Published private(set) var context: NetworkContext = .empty
 
-    private let monitor = NWPathMonitor()
+    private var monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "org.malcomvetter.PingStat.path")
     private let logger: LoggingService
     private let debugEnabledProvider: () -> Bool
@@ -20,15 +20,24 @@ final class NetworkContextService: ObservableObject {
     }
 
     func start() {
-        monitor.pathUpdateHandler = { [weak self] path in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.refreshContext(pathStatus: path.status, path: path)
-            }
-        }
+        attachPathHandler(to: monitor)
         monitor.start(queue: monitorQueue)
         Task { @MainActor in
             await refreshContext(pathStatus: monitor.currentPath.status, path: monitor.currentPath)
+        }
+    }
+
+    /// After full system sleep, ``NWPathMonitor`` may stop delivering path updates until replaced.
+    func restartPathMonitoring() {
+        logger.log(.notice, category: .networkContext, "event=path_monitor_restart reason=wake_or_recovery")
+        monitor.pathUpdateHandler = nil
+        monitor.cancel()
+        let next = NWPathMonitor()
+        monitor = next
+        attachPathHandler(to: next)
+        next.start(queue: monitorQueue)
+        Task { @MainActor in
+            await refreshContext(pathStatus: next.currentPath.status, path: next.currentPath)
         }
     }
 
@@ -39,6 +48,15 @@ final class NetworkContextService: ObservableObject {
 
     deinit {
         monitor.cancel()
+    }
+
+    private func attachPathHandler(to pathMonitor: NWPathMonitor) {
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.refreshContext(pathStatus: path.status, path: path)
+            }
+        }
     }
 
     func refreshContext(pathStatus: NWPath.Status? = nil, path activePath: NWPath? = nil) async {

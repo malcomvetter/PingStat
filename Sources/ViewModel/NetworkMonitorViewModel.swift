@@ -36,6 +36,7 @@ final class NetworkMonitorViewModel: ObservableObject {
     private var pingLoopTask: Task<Void, Never>?
     private var dnsLoopTask: Task<Void, Never>?
     private var powerModeObserver: NSObjectProtocol?
+    private var workspaceWakeObserver: NSObjectProtocol?
     private var previousState: NetworkHealthState = .offline
     private var previousDNSFiltering = false
     /// Health-related notification toasts are suppressed until this time (set in `start()`).
@@ -102,6 +103,7 @@ final class NetworkMonitorViewModel: ObservableObject {
         networkContextService.start()
         rebuildEndpoints()
         observePowerMode()
+        observeSystemWake()
         startPingLoop()
         startDNSLoop()
     }
@@ -121,6 +123,7 @@ final class NetworkMonitorViewModel: ObservableObject {
             NotificationCenter.default.removeObserver(powerModeObserver)
             self.powerModeObserver = nil
         }
+        removeSystemWakeObserver()
         logging.log(.notice, category: .lifecycle, "event=monitor_stop phase=end")
     }
 
@@ -249,6 +252,33 @@ final class NetworkMonitorViewModel: ObservableObject {
             self.startPingLoop()
             self.startDNSLoop()
         }
+    }
+
+    private func observeSystemWake() {
+        removeSystemWakeObserver()
+        workspaceWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleSystemDidWake()
+        }
+    }
+
+    private func removeSystemWakeObserver() {
+        if let workspaceWakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceWakeObserver)
+            self.workspaceWakeObserver = nil
+        }
+    }
+
+    private func handleSystemDidWake() {
+        logging.log(.notice, category: .lifecycle, "event=system_did_wake note=NSWorkspace.didWakeNotification")
+        networkContextService.restartPathMonitoring()
+        rebuildEndpoints()
+        startPingLoop()
+        startDNSLoop()
+        requestHealthEvaluation()
     }
 
     private func startPingLoop() {

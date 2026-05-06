@@ -22,15 +22,25 @@ final class StatusItemController: NSObject {
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         applyStatusBarIcon()
-        Publishers.CombineLatest(viewModel.$snapshot, viewModel.$statusBarIconReflectsLiveHealth)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _, _ in
-                self?.applyStatusBarIcon()
-            }
-            .store(in: &cancellables)
+        // Only refresh on health-state / startup-grace changes — `snapshot` is reassigned every ping with a new `updatedAt`, which would redraw the status item ~1 Hz and spam AppKit fence logs.
+        Publishers.CombineLatest(
+            viewModel.$snapshot.map(\.state).removeDuplicates(),
+            viewModel.$statusBarIconReflectsLiveHealth.removeDuplicates()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _, _ in
+            self?.applyStatusBarIcon()
+        }
+        .store(in: &cancellables)
 
         popover.behavior = .transient
         popover.animates = true
+        popover.delegate = self
+        // Popover content is installed only while shown so SwiftUI is not rebuilt on every ping/DNS tick.
+    }
+
+    private func ensurePopoverContentInstalled() {
+        guard popover.contentViewController == nil else { return }
         let hosting = NSHostingController(rootView: StatusPopoverView(viewModel: viewModel))
         hosting.sizingOptions = [.intrinsicContentSize]
         popover.contentViewController = hosting
@@ -155,6 +165,7 @@ final class StatusItemController: NSObject {
         if popover.isShown {
             popover.performClose(sender)
         } else {
+            ensurePopoverContentInstalled()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
@@ -364,5 +375,11 @@ final class StatusItemController: NSObject {
             case .pending: return .secondaryLabelColor
             }
         }
+    }
+}
+
+extension StatusItemController: NSPopoverDelegate {
+    func popoverDidClose(_ notification: Notification) {
+        popover.contentViewController = nil
     }
 }
