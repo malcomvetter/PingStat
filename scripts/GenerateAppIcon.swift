@@ -3,13 +3,13 @@ import AppKit
 import Foundation
 
 /// Renders PingStat.app icons: black canvas, centered ``cellularbars`` SF Symbol in blazing teal
-/// (same as ``HealthAppearance.blazingAccentNSColor`` in dark menu bar). No wordmark.
+/// (same as ``HealthAppearance.blazingAccentNSColor()``). No wordmark.
 ///
 /// Run from repo root: `swift scripts/GenerateAppIcon.swift`
 /// Writes `Design/PingStat-app-icon-master.png` and all entries in `Assets.xcassets/AppIcon.appiconset/`.
 
 func blazingTeal() -> NSColor {
-    // Match `HealthAppearance.blazingAccentNSColor()` dark-chrome branch (menu bar “blazing”).
+    // Match `HealthAppearance.blazingAccentNSColor()` (single profile for all appearances).
     NSColor(calibratedRed: 0.15, green: 0.88, blue: 0.82, alpha: 1)
 }
 

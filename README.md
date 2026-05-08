@@ -13,7 +13,7 @@ PingStat is a **menu bar utility for macOS** that watches **how your network act
 ### What is monitored
 
 - **Local network** — discovers your **default gateway** from the active route and pings it over ICMP. Shows gateway IP / interface context when available.
-- **WAN targets** — optional ICMP checks to well-known anycast-style endpoints (**Cloudflare**, **Google**, **OpenDNS**, **Level3**, **Quad9**). Toggle each in Settings; from the popover you can **disable a WAN row** via context menu without opening Settings.
+- **WAN targets** — optional ICMP checks to well-known anycast-style endpoints (**Cloudflare**, **Google**, **OpenDNS**, **CenturyLink**, **Quad9**). Toggle each in Settings; from the popover you can **disable a WAN row** via context menu without opening Settings.
 - **Custom target** — optional extra host by **label + IP**, with an optional **DNS probe** column tied to your custom resolver behavior.
 
 ### Latency and DNS

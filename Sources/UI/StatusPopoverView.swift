@@ -258,9 +258,9 @@ struct StatusPopoverView: View {
         let cf = viewModel.endpoints.first { $0.kind == .cloudflare }
         let gg = viewModel.endpoints.first { $0.kind == .google }
         let od = viewModel.endpoints.first { $0.kind == .openDNS }
-        let l3 = viewModel.endpoints.first { $0.kind == .level3 }
+        let centuryLink = viewModel.endpoints.first { $0.kind == .level3 }
         let q9 = viewModel.endpoints.first { $0.kind == .quad9 }
-        return [cf, gg, od, l3, q9].compactMap { $0 }
+        return [cf, gg, od, centuryLink, q9].compactMap { $0 }
     }
 
     private var customEndpointsForSummary: [EndpointStatus] {
@@ -321,7 +321,7 @@ struct StatusPopoverView: View {
                 case .openDNS:
                     SummaryRowLeading.openDNS
                 case .level3:
-                    SummaryRowLeading.level3
+                    SummaryRowLeading.centuryLink
                 case .quad9:
                     SummaryRowLeading.quad9
                 default:
@@ -743,29 +743,64 @@ private enum SummaryRowLeading {
         .accessibilityLabel("Google")
     }
 
+    /// Asset catalog bitmap when bundled; otherwise classic blue shield fallback.
     static var openDNS: some View {
-        Image(systemName: "checkmark.shield.fill")
-            .font(.title2)
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(Color(red: 0.0, green: 0.42, blue: 0.72), Color(red: 0.55, green: 0.78, blue: 0.95))
-            .accessibilityLabel("OpenDNS")
+        Group {
+            if let img = BrandMarkImageLoader.nsImage(named: "OpenDNSMark") {
+                Image(nsImage: img)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+            } else {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.title2)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(Color(red: 0.0, green: 0.42, blue: 0.72), Color(red: 0.55, green: 0.78, blue: 0.95))
+            }
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityLabel("OpenDNS")
     }
 
-    static var level3: some View {
-        Image(systemName: "arrow.triangle.swap")
-            .font(.title2)
-            .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(Color(red: 0.42, green: 0.28, blue: 0.58))
-            .accessibilityLabel("Level3")
+    /// Asset catalog bitmap when bundled; otherwise green SF Symbol fallback (legacy Level3 hop).
+    static var centuryLink: some View {
+        Group {
+            if let img = BrandMarkImageLoader.nsImage(named: "CenturyLinkMark") {
+                Image(nsImage: img)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+            } else {
+                Image(systemName: "arrow.triangle.swap")
+                    .font(.title2)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color(red: 0.32, green: 0.72, blue: 0.38))
+            }
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityLabel("CenturyLink")
     }
 
-    /// Quad9-style teal shield (no bundled mark asset yet).
+    /// Asset catalog bitmap when bundled; otherwise teal shield fallback.
     static var quad9: some View {
-        Image(systemName: "shield.checkered")
-            .font(.title2)
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(Color(red: 0.12, green: 0.48, blue: 0.52), Color(red: 0.75, green: 0.88, blue: 0.90))
-            .accessibilityLabel("Quad9")
+        Group {
+            if let img = BrandMarkImageLoader.nsImage(named: "Quad9Mark") {
+                Image(nsImage: img)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+            } else {
+                Image(systemName: "shield.checkered")
+                    .font(.title2)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(
+                        HealthAppearance.blazingAccentColor(),
+                        Color(red: 0.62, green: 0.96, blue: 0.92)
+                    )
+            }
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityLabel("Quad9")
     }
 
     static var wanRemote: some View {

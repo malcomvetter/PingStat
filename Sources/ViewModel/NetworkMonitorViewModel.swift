@@ -473,7 +473,7 @@ final class NetworkMonitorViewModel: ObservableObject {
             .cloudflare: "Cloudflare",
             .google: "Google",
             .openDNS: "OpenDNS",
-            .level3: "Level3",
+            .level3: "CenturyLink",
             .quad9: "Quad9"
         ]
         for (kind, host) in settingsStore.config.enabledWanResolverTargets {

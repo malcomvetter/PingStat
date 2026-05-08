@@ -12,61 +12,15 @@ struct SettingsView: View {
             ScrollView {
                 Form {
                     Section {
+                        LabeledContent("Version", value: AppVersion.marketingAndBuild)
+                    }
+
+                    Section {
                         Toggle("Launch at Login", isOn: binding(\.launchAtLoginEnabled))
                     }
 
                     Section {
                         Toggle("Enable Debug Logging", isOn: binding(\.debugLoggingEnabled))
-                    }
-
-                    Section("About") {
-                        LabeledContent("Version", value: AppVersion.marketingAndBuild)
-                    }
-
-                    Section("Diagnostics & logs") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(
-                                "PingStat records lifecycle and probe events with Apple’s unified logging (the same subsystem Console.app and Terminal’s log(1) use). Lifecycle lines use the category app.lifecycle; probes use probe.ping, probe.dns, and related categories."
-                            )
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                            Text(
-                                "Enable Debug Logging above for verbose probe detail in that stream. Recent lines are also held in an in-memory ring buffer (about two thousand entries) and embedded in the JSON produced by Export Debug…."
-                            )
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Console filter (subsystem)")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                Text(AppVersion.consoleSubsystemFilter)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .foregroundStyle(.primary)
-                                Text(AppVersion.logStreamShellExample)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .foregroundStyle(.primary)
-                            }
-
-                            HStack(spacing: 12) {
-                                Button("Copy Console filter") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(
-                                        AppVersion.consoleSubsystemFilter,
-                                        forType: .string
-                                    )
-                                }
-                                Button("Open Console…") {
-                                    DiagnosticsUIActions.openConsoleApp()
-                                }
-                            }
-                        }
-                        .padding(.vertical, 2)
                     }
 
                     Section("Notifications") {
@@ -118,15 +72,15 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    Section("WAN targets") {
+                    Section("WAN Targets") {
                         Toggle("Cloudflare", isOn: binding(\.pingCloudflareEnabled))
                         Toggle("Google", isOn: binding(\.pingGoogleEnabled))
                         Toggle("OpenDNS", isOn: binding(\.pingOpenDNSEnabled))
-                        Toggle("Level3", isOn: binding(\.pingLevel3Enabled))
+                        Toggle("CenturyLink", isOn: binding(\.pingLevel3Enabled))
                         Toggle("Quad9", isOn: binding(\.pingQuad9Enabled))
                     }
 
-                    Section("Custom Target") {
+                    Section("Custom Targets") {
                         TextField("Label", text: customLabelBinding())
                         TextField("IP Address", text: customIPBinding())
                         Toggle("Use DNS probes", isOn: customDnsProbesBinding())
@@ -258,6 +212,52 @@ struct SettingsView: View {
                                 "After the status actually changes, wait at least this long before another change can register (reduces rapid flip-flop)."
                             )
                         }
+                    }
+
+                    Section("Diagnostics & Logs") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(
+                                "PingStat records lifecycle and probe events with Apple’s unified logging (the same subsystem Console.app and Terminal’s log(1) use). Lifecycle lines use the category app.lifecycle; probes use probe.ping, probe.dns, and related categories."
+                            )
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                            Text(
+                                "Enable Debug Logging above for verbose probe detail in that stream. Recent lines are also held in an in-memory ring buffer (about two thousand entries) and embedded in the JSON produced by Export Debug…."
+                            )
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Console filter (subsystem)")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Text(AppVersion.consoleSubsystemFilter)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(.primary)
+                                Text(AppVersion.logStreamShellExample)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(.primary)
+                            }
+
+                            HStack(spacing: 12) {
+                                Button("Copy Console filter") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(
+                                        AppVersion.consoleSubsystemFilter,
+                                        forType: .string
+                                    )
+                                }
+                                Button("Open Console…") {
+                                    DiagnosticsUIActions.openConsoleApp()
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
                     }
 
                     Section {

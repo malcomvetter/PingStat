@@ -119,9 +119,9 @@ final class PingStatTests: XCTestCase {
             last10: [],
             latest: .init(timestamp: now, success: true, rttMs: 21, timedOut: false, message: "ok")
         )
-        let level3 = EndpointStatus(
+        let centuryLink = EndpointStatus(
             id: "level3",
-            label: "Level3",
+            label: "CenturyLink",
             host: "4.2.2.1",
             kind: .level3,
             meanLast5Ms: 19,
@@ -151,7 +151,7 @@ final class PingStatTests: XCTestCase {
                 .cloudflare: cloudflare,
                 .google: google,
                 .openDNS: openDNS,
-                .level3: level3,
+                .level3: centuryLink,
                 .quad9: quad9
             ],
             dnsStatus: DNSCheckStatus(),
@@ -209,9 +209,9 @@ final class PingStatTests: XCTestCase {
             last10: [],
             latest: .init(timestamp: now, success: true, rttMs: 53, timedOut: false, message: "ok")
         )
-        let level3 = EndpointStatus(
+        let centuryLink = EndpointStatus(
             id: "level3",
-            label: "Level3",
+            label: "CenturyLink",
             host: "4.2.2.1",
             kind: .level3,
             meanLast5Ms: 54,
@@ -241,7 +241,7 @@ final class PingStatTests: XCTestCase {
                 .cloudflare: cloudflare,
                 .google: google,
                 .openDNS: openDNS,
-                .level3: level3,
+                .level3: centuryLink,
                 .quad9: quad9
             ],
             dnsStatus: dns,

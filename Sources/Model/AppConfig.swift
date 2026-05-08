@@ -59,7 +59,7 @@ struct AppConfig: Codable, Equatable {
     var pingGoogleEnabled: Bool
     /// When true, include OpenDNS / Cisco (208.67.220.220) in ICMP and summary UI.
     var pingOpenDNSEnabled: Bool
-    /// When true, include Level3 (4.2.2.1) in ICMP and summary UI.
+    /// When true, include CenturyLink / legacy Level3 resolver (4.2.2.1) in ICMP and summary UI.
     var pingLevel3Enabled: Bool
     /// When true, include Quad9 (9.9.9.9) in ICMP and summary UI.
     var pingQuad9Enabled: Bool

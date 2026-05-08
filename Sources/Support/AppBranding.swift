@@ -24,33 +24,20 @@ enum AppBranding {
     }
 }
 
-/// Shared “healthy / success” green for UI that should stay vivid in dark mode but read clearly in light mode.
+/// Shared “healthy / success” green and blazing teal: **light and dark both use the original dark-chrome palette** (system green and vivid cyan-teal) so the UI stays bright and consistent across appearances.
 enum HealthAppearance {
-    static func successGreen(for colorScheme: ColorScheme) -> Color {
-        switch colorScheme {
-        case .dark:
-            return .green
-        case .light:
-            return Color(red: 0.086, green: 0.38, blue: 0.204)
-        @unknown default:
-            return .green
-        }
+    static func successGreen(for _: ColorScheme) -> Color {
+        .green
     }
 
     /// Matches ``successGreen(for:)`` for `NSMenu` / `NSImage` symbol palette colors.
     static func successGreenNSColor() -> NSColor {
-        if NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
-            return .systemGreen
-        }
-        return NSColor(srgbRed: 0.086, green: 0.38, blue: 0.204, alpha: 1)
+        .systemGreen
     }
 
     /// Teal used for global ``NetworkHealthState.blazing`` and per-row “blazing-class” ping/DNS accents in the popover.
     static func blazingAccentNSColor() -> NSColor {
-        let darkChrome = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        return darkChrome
-            ? NSColor(calibratedRed: 0.15, green: 0.88, blue: 0.82, alpha: 1)
-            : NSColor(calibratedRed: 0.0, green: 0.52, blue: 0.48, alpha: 1)
+        NSColor(calibratedRed: 0.15, green: 0.88, blue: 0.82, alpha: 1)
     }
 
     static func blazingAccentColor() -> Color {
