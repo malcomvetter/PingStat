@@ -12,7 +12,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func show(viewModel: NetworkMonitorViewModel) {
-        let title = "\(AppBranding.productName) v\(AppVersion.marketing) - Settings"
+        let title = "\(AppBranding.productName) v\(AppVersion.marketing) · Settings"
         if let window {
             window.title = title
             window.makeKeyAndOrderFront(nil)

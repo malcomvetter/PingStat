@@ -18,8 +18,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.malcomvetter.PingStat
         PRODUCT_NAME: PingStat
         PRODUCT_MODULE_NAME: PingStat
-        MARKETING_VERSION: "1.0.3"
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: "1.0.4"
+        CURRENT_PROJECT_VERSION: "5"
         INFOPLIST_KEY_CFBundleDisplayName: PingStat
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         INFOPLIST_KEY_LSUIElement: YES

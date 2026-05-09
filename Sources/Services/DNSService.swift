@@ -21,7 +21,8 @@ final class DNSService {
         configuredServers: [String],
         fallbackServers: [String],
         customNameservers: [String],
-        timeoutMs: Int
+        timeoutMs: Int,
+        skipSystemResolverProbes: Bool = false
     ) async -> DNSCheckResult {
         let hostname = probeHostname.trimmingCharacters(in: .whitespacesAndNewlines)
         let configured = configuredServers.filter { !$0.isEmpty }
@@ -52,7 +53,12 @@ final class DNSService {
                 fallback: fallbackResponses,
                 custom: customResponses
             )
-            status.allConfiguredTimedOut = true
+            if skipSystemResolverProbes {
+                status.systemResolverProbesSkipped = true
+                status.allConfiguredTimedOut = false
+            } else {
+                status.allConfiguredTimedOut = true
+            }
             let fallbackSuccesses = fallbackResponses.filter(\.success)
             status.fallbackWorked = !fallbackSuccesses.isEmpty
             if status.fallbackWorked {

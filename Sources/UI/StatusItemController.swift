@@ -23,12 +23,13 @@ final class StatusItemController: NSObject {
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         applyStatusBarIcon()
         // Only refresh on health-state / startup-grace changes — `snapshot` is reassigned every ping with a new `updatedAt`, which would redraw the status item ~1 Hz and spam AppKit fence logs.
-        Publishers.CombineLatest(
+        Publishers.CombineLatest3(
             viewModel.$snapshot.map(\.state).removeDuplicates(),
-            viewModel.$statusBarIconReflectsLiveHealth.removeDuplicates()
+            viewModel.$statusBarIconReflectsLiveHealth.removeDuplicates(),
+            viewModel.$lowDataModePathActive.removeDuplicates()
         )
         .receive(on: DispatchQueue.main)
-        .sink { [weak self] _, _ in
+        .sink { [weak self] _, _, _ in
             self?.applyStatusBarIcon()
         }
         .store(in: &cancellables)
@@ -91,7 +92,7 @@ final class StatusItemController: NSObject {
 
         menu.addItem(.separator())
         let versionItem = NSMenuItem(
-            title: "\(AppBranding.productName) Version \(AppVersion.marketingAndBuild)",
+            title: "\(AppBranding.productName) Version \(AppVersion.marketing)",
             action: nil,
             keyEquivalent: ""
         )
@@ -179,20 +180,27 @@ final class StatusItemController: NSObject {
             image?.isTemplate = false
         }
         button.image = image
-        button.toolTip = "\(AppBranding.productName) - Network \(liveHealthState.title)"
+        let ldm = viewModel.lowDataModePathActive ? " – Low Data Mode" : ""
+        button.toolTip = "\(AppBranding.productName) - Network \(liveHealthState.title)\(ldm)"
     }
 
     private func addDNSStatusItems(to menu: NSMenu) {
+        let ldm = viewModel.lowDataModePathActive ? " – Low Data Mode" : ""
         let heading = NSMenuItem(
-            title: "Network · \(viewModel.snapshot.state.title)",
+            title: "Network · \(viewModel.snapshot.state.title)\(ldm)",
             action: nil,
             keyEquivalent: ""
         )
         heading.isEnabled = false
         menu.addItem(heading)
 
-        let local = localNetworkMenuRow(compact: true)
-        addStatusMenuRow(to: menu, title: "Local", detail: local.detail, state: local.state)
+        if let gw = viewModel.endpoints.first(where: { $0.kind == .gateway }),
+           endpointFullyLDMPaused(gw) {
+            addLowDataModePausedMenuRow(to: menu, label: "Local", host: gw.host)
+        } else {
+            let local = localNetworkMenuRow(compact: true)
+            addStatusMenuRow(to: menu, title: "Local", detail: local.detail, state: local.state)
+        }
 
         for kind in [
             EndpointKind.cloudflare,
@@ -202,8 +210,12 @@ final class StatusItemController: NSObject {
             EndpointKind.quad9
         ] {
             guard let ep = viewModel.endpoints.first(where: { $0.kind == kind }) else { continue }
-            let row = resolverWANMenuRow(ep, compact: true)
-            addStatusMenuRow(to: menu, title: ep.label, detail: row.detail, state: row.state)
+            if endpointFullyLDMPaused(ep) {
+                addLowDataModePausedMenuRow(to: menu, label: ep.label, host: ep.host)
+            } else {
+                let row = resolverWANMenuRow(ep, compact: true)
+                addStatusMenuRow(to: menu, title: ep.label, detail: row.detail, state: row.state)
+            }
         }
 
         if let note = dnsSituationNotesSingleLine(maxCharacters: 72) {
@@ -251,6 +263,9 @@ final class StatusItemController: NSObject {
 
     /// Middle segment for Local Network row — primary resolver status (popover primary DNS column).
     private func primaryDNSCompactLabel() -> String {
+        if let gw = viewModel.endpoints.first(where: { $0.kind == .gateway }), !gw.dnsProbingActive {
+            return "DNS paused"
+        }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return "DNS …" }
         guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else {
@@ -279,13 +294,23 @@ final class StatusItemController: NSObject {
 
     /// WAN row for the menu. `compact` uses shorter ICMP text so the menu stays short (fewer wrapped lines / less vertical scroll).
     private func resolverWANMenuRow(_ ep: EndpointStatus, compact: Bool = false) -> (detail: String, state: StatusMenuRowState) {
-        let dnsPart = dnsProbeLabel(for: ep.host)
+        let dnsPart = dnsProbeLabel(for: ep.host, endpoint: ep)
         let (icmpPart, icmpState) = icmpSegment(for: ep, compact: compact)
         let detail = "\(ep.host) · \(dnsPart) · \(icmpPart)"
         return (detail, icmpState)
     }
 
     private func icmpSegment(for ep: EndpointStatus, compact: Bool) -> (String, StatusMenuRowState) {
+        guard ep.icmpProbingActive else {
+            if viewModel.lowDataModePathActive,
+               ep.kind == .gateway,
+               ep.dnsProbingActive {
+                let part = compact ? "(Low Data Mode)" : "ICMP (Low Data Mode)"
+                return (part, .pending)
+            }
+            let part = compact ? "—" : "ICMP paused"
+            return (part, .pending)
+        }
         let icmpState = icmpEndpointState(ep)
         let icmpPart: String
         switch icmpState {
@@ -316,7 +341,8 @@ final class StatusItemController: NSObject {
         return String(full.prefix(budget)) + ellipsis
     }
 
-    private func dnsProbeLabel(for host: String) -> String {
+    private func dnsProbeLabel(for host: String, endpoint: EndpointStatus) -> String {
+        guard endpoint.dnsProbingActive else { return "DNS paused" }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return "DNS …" }
         if let answered = dns.fallbackAnsweredByServer[host] {
@@ -330,6 +356,29 @@ final class StatusItemController: NSObject {
         if latest.success { return .good }
         if latest.timedOut { return .bad }
         return .bad
+    }
+
+    private func endpointFullyLDMPaused(_ ep: EndpointStatus) -> Bool {
+        viewModel.lowDataModePathActive && !ep.icmpProbingActive && !ep.dnsProbingActive
+    }
+
+    /// Single-line menu text when a target has no probes under Low Data Mode (matches popover row policy).
+    private func addLowDataModePausedMenuRow(to menu: NSMenu, label: String, host: String) {
+        let full = "\(label) \(host) · Paused (Low Data Mode)"
+        let clipped = Self.clipMenuRowTitle(full, maxCharacters: 72)
+        let item = NSMenuItem(title: clipped, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        let rowState: StatusMenuRowState = .pending
+        if let base = NSImage(systemSymbolName: rowState.symbolName, accessibilityDescription: nil) {
+            if #available(macOS 12.0, *) {
+                let config = NSImage.SymbolConfiguration(paletteColors: [rowState.tintColor])
+                item.image = base.withSymbolConfiguration(config) ?? base
+            } else {
+                item.image = base
+                item.image?.isTemplate = true
+            }
+        }
+        menu.addItem(item)
     }
 
     private func addStatusMenuRow(to menu: NSMenu, title: String, detail: String, state: StatusMenuRowState) {

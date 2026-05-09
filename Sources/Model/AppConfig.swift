@@ -5,17 +5,21 @@ struct CustomPingTarget: Codable, Equatable {
     var ipAddress: String
     /// When true, run the same DNS probe used for WAN targets against `ipAddress` as nameserver.
     var dnsProbesEnabled: Bool
+    /// When Low Data Mode is active, allow ICMP/DNS probes to this target (if the master toggles allow).
+    var useInLowDataMode: Bool
 
-    init(label: String, ipAddress: String, dnsProbesEnabled: Bool = false) {
+    init(label: String, ipAddress: String, dnsProbesEnabled: Bool = false, useInLowDataMode: Bool = false) {
         self.label = label
         self.ipAddress = ipAddress
         self.dnsProbesEnabled = dnsProbesEnabled
+        self.useInLowDataMode = useInLowDataMode
     }
 
     enum CodingKeys: String, CodingKey {
         case label
         case ipAddress
         case dnsProbesEnabled
+        case useInLowDataMode
     }
 
     init(from decoder: Decoder) throws {
@@ -23,6 +27,7 @@ struct CustomPingTarget: Codable, Equatable {
         label = try c.decode(String.self, forKey: .label)
         ipAddress = try c.decode(String.self, forKey: .ipAddress)
         dnsProbesEnabled = try c.decodeIfPresent(Bool.self, forKey: .dnsProbesEnabled) ?? false
+        useInLowDataMode = try c.decodeIfPresent(Bool.self, forKey: .useInLowDataMode) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -30,6 +35,7 @@ struct CustomPingTarget: Codable, Equatable {
         try c.encode(label, forKey: .label)
         try c.encode(ipAddress, forKey: .ipAddress)
         try c.encode(dnsProbesEnabled, forKey: .dnsProbesEnabled)
+        try c.encode(useInLowDataMode, forKey: .useInLowDataMode)
     }
 }
 
@@ -64,6 +70,14 @@ struct AppConfig: Codable, Equatable {
     /// When true, include Quad9 (9.9.9.9) in ICMP and summary UI.
     var pingQuad9Enabled: Bool
     var customTarget: CustomPingTarget?
+    /// Per-WAN: allow probes while Low Data Mode is active (constrained / expensive path).
+    var lowDataModeUseCloudflare: Bool
+    var lowDataModeUseGoogle: Bool
+    var lowDataModeUseOpenDNS: Bool
+    var lowDataModeUseLevel3: Bool
+    var lowDataModeUseQuad9: Bool
+    /// Probe system-configured resolvers during Low Data Mode (gateway row DNS column only; ICMP to gateway stays off).
+    var lowDataModeUseLocalNetworkDNS: Bool
 
     static let defaults = AppConfig(
         pingIntervalMs: 1_000,
@@ -84,7 +98,13 @@ struct AppConfig: Codable, Equatable {
         pingOpenDNSEnabled: false,
         pingLevel3Enabled: false,
         pingQuad9Enabled: false,
-        customTarget: nil
+        customTarget: nil,
+        lowDataModeUseCloudflare: true,
+        lowDataModeUseGoogle: false,
+        lowDataModeUseOpenDNS: false,
+        lowDataModeUseLevel3: false,
+        lowDataModeUseQuad9: false,
+        lowDataModeUseLocalNetworkDNS: false
     )
 
     enum CodingKeys: String, CodingKey {
@@ -115,6 +135,12 @@ struct AppConfig: Codable, Equatable {
         case pingQuad9Enabled
         case customTarget
         case dnsProbeHostname
+        case lowDataModeUseCloudflare
+        case lowDataModeUseGoogle
+        case lowDataModeUseOpenDNS
+        case lowDataModeUseLevel3
+        case lowDataModeUseQuad9
+        case lowDataModeUseLocalNetworkDNS
     }
 
     init(
@@ -136,7 +162,13 @@ struct AppConfig: Codable, Equatable {
         pingOpenDNSEnabled: Bool,
         pingLevel3Enabled: Bool,
         pingQuad9Enabled: Bool,
-        customTarget: CustomPingTarget?
+        customTarget: CustomPingTarget?,
+        lowDataModeUseCloudflare: Bool,
+        lowDataModeUseGoogle: Bool,
+        lowDataModeUseOpenDNS: Bool,
+        lowDataModeUseLevel3: Bool,
+        lowDataModeUseQuad9: Bool,
+        lowDataModeUseLocalNetworkDNS: Bool
     ) {
         self.pingIntervalMs = pingIntervalMs
         self.dnsIntervalMs = dnsIntervalMs
@@ -157,6 +189,12 @@ struct AppConfig: Codable, Equatable {
         self.pingLevel3Enabled = pingLevel3Enabled
         self.pingQuad9Enabled = pingQuad9Enabled
         self.customTarget = customTarget
+        self.lowDataModeUseCloudflare = lowDataModeUseCloudflare
+        self.lowDataModeUseGoogle = lowDataModeUseGoogle
+        self.lowDataModeUseOpenDNS = lowDataModeUseOpenDNS
+        self.lowDataModeUseLevel3 = lowDataModeUseLevel3
+        self.lowDataModeUseQuad9 = lowDataModeUseQuad9
+        self.lowDataModeUseLocalNetworkDNS = lowDataModeUseLocalNetworkDNS
     }
 
     init(from decoder: Decoder) throws {
@@ -226,6 +264,13 @@ struct AppConfig: Codable, Equatable {
         pingLevel3Enabled = try c.decodeIfPresent(Bool.self, forKey: .pingLevel3Enabled) ?? Self.defaults.pingLevel3Enabled
         pingQuad9Enabled = try c.decodeIfPresent(Bool.self, forKey: .pingQuad9Enabled) ?? Self.defaults.pingQuad9Enabled
         customTarget = try c.decodeIfPresent(CustomPingTarget.self, forKey: .customTarget)
+        lowDataModeUseCloudflare = try c.decodeIfPresent(Bool.self, forKey: .lowDataModeUseCloudflare) ?? Self.defaults.lowDataModeUseCloudflare
+        lowDataModeUseGoogle = try c.decodeIfPresent(Bool.self, forKey: .lowDataModeUseGoogle) ?? Self.defaults.lowDataModeUseGoogle
+        lowDataModeUseOpenDNS = try c.decodeIfPresent(Bool.self, forKey: .lowDataModeUseOpenDNS) ?? Self.defaults.lowDataModeUseOpenDNS
+        lowDataModeUseLevel3 = try c.decodeIfPresent(Bool.self, forKey: .lowDataModeUseLevel3) ?? Self.defaults.lowDataModeUseLevel3
+        lowDataModeUseQuad9 = try c.decodeIfPresent(Bool.self, forKey: .lowDataModeUseQuad9) ?? Self.defaults.lowDataModeUseQuad9
+        lowDataModeUseLocalNetworkDNS =
+            try c.decodeIfPresent(Bool.self, forKey: .lowDataModeUseLocalNetworkDNS) ?? Self.defaults.lowDataModeUseLocalNetworkDNS
     }
 
     func encode(to encoder: Encoder) throws {
@@ -249,6 +294,12 @@ struct AppConfig: Codable, Equatable {
         try c.encode(pingLevel3Enabled, forKey: .pingLevel3Enabled)
         try c.encode(pingQuad9Enabled, forKey: .pingQuad9Enabled)
         try c.encodeIfPresent(customTarget, forKey: .customTarget)
+        try c.encode(lowDataModeUseCloudflare, forKey: .lowDataModeUseCloudflare)
+        try c.encode(lowDataModeUseGoogle, forKey: .lowDataModeUseGoogle)
+        try c.encode(lowDataModeUseOpenDNS, forKey: .lowDataModeUseOpenDNS)
+        try c.encode(lowDataModeUseLevel3, forKey: .lowDataModeUseLevel3)
+        try c.encode(lowDataModeUseQuad9, forKey: .lowDataModeUseQuad9)
+        try c.encode(lowDataModeUseLocalNetworkDNS, forKey: .lowDataModeUseLocalNetworkDNS)
     }
 }
 
@@ -276,15 +327,39 @@ extension AppConfig {
         enabledWanResolverTargets.map(\.host)
     }
 
-    /// Seconds between ping rounds (for `Task.sleep`).
-    func adjustedPingInterval(lowPowerMode: Bool) -> Double {
-        let ms = lowPowerMode ? pingIntervalMs * 5 : pingIntervalMs
+    func lowDataModeUse(for kind: EndpointKind) -> Bool {
+        switch kind {
+        case .cloudflare: return lowDataModeUseCloudflare
+        case .google: return lowDataModeUseGoogle
+        case .openDNS: return lowDataModeUseOpenDNS
+        case .level3: return lowDataModeUseLevel3
+        case .quad9: return lowDataModeUseQuad9
+        case .gateway, .custom:
+            return false
+        }
+    }
+
+    /// Fallback nameservers to probe: only WAN targets that stay eligible under Low Data Mode when it is active.
+    func fallbackDNSServersForProbes(lowDataModePathActive: Bool) -> [String] {
+        guard lowDataModePathActive else { return fallbackDNSServers }
+        return enabledWanResolverTargets.compactMap { pair in
+            lowDataModeUse(for: pair.kind) ? pair.host : nil
+        }
+    }
+
+    /// Seconds between ping rounds (for `Task.sleep`). Low Power and Low Data Mode each multiply the base interval by 5.
+    func adjustedPingInterval(lowPowerMode: Bool, lowDataMode: Bool) -> Double {
+        var ms = pingIntervalMs
+        if lowPowerMode { ms *= 5 }
+        if lowDataMode { ms *= 5 }
         return max(0.001, ms / 1000)
     }
 
     /// Seconds between DNS checks.
-    func adjustedDNSInterval(lowPowerMode: Bool) -> Double {
-        let ms = lowPowerMode ? dnsIntervalMs * 5 : dnsIntervalMs
+    func adjustedDNSInterval(lowPowerMode: Bool, lowDataMode: Bool) -> Double {
+        var ms = dnsIntervalMs
+        if lowPowerMode { ms *= 5 }
+        if lowDataMode { ms *= 5 }
         return max(0.001, ms / 1000)
     }
 

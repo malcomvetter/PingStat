@@ -11,6 +11,17 @@ final class PingStatTests: XCTestCase {
         XCTAssertTrue(ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: true))
     }
 
+    func testDNSProbeDetailNameserverKeyHandlesZonedIPv6() {
+        let line =
+            "@fe80::783f:4dff:feea:ad64%en0 Q A captive.apple.com → CNAME captive.g.aaplimg.com.; A 17.253.7.133"
+        XCTAssertEqual(DNSProbeDetailLine.nameserverKey(from: line), "fe80::783f:4dff:feea:ad64%en0")
+    }
+
+    func testDNSProbeDetailNameserverKeyIPv4() {
+        let line = "@192.168.1.1 Q A example.com → A 93.184.216.34"
+        XCTAssertEqual(DNSProbeDetailLine.nameserverKey(from: line), "192.168.1.1")
+    }
+
     func testFallbackDNSServersOnlyIncludesEnabledWANTargets() {
         var c = AppConfig.defaults
         c.pingCloudflareEnabled = false
@@ -71,7 +82,8 @@ final class PingStatTests: XCTestCase {
             ),
             endpointStatuses: [:],
             dnsStatus: DNSCheckStatus(),
-            config: .defaults
+            config: .defaults,
+            lowDataModePathActive: false
         )
 
         _ = evaluator.evaluate(input)
@@ -155,7 +167,8 @@ final class PingStatTests: XCTestCase {
                 .quad9: quad9
             ],
             dnsStatus: DNSCheckStatus(),
-            config: .defaults
+            config: .defaults,
+            lowDataModePathActive: false
         )
 
         let confirmations = AppConfig.defaults.statusChangeConfirmationCount
@@ -245,7 +258,8 @@ final class PingStatTests: XCTestCase {
                 .quad9: quad9
             ],
             dnsStatus: dns,
-            config: .defaults
+            config: .defaults,
+            lowDataModePathActive: false
         )
 
         let confirmations = AppConfig.defaults.statusChangeConfirmationCount
@@ -255,6 +269,105 @@ final class PingStatTests: XCTestCase {
         let snapshot = evaluator.evaluate(input)
 
         XCTAssertEqual(snapshot.state, .degraded)
+    }
+
+    func testAdjustedPingIntervalStacksLowPowerAndLowDataMode() {
+        let c = AppConfig.defaults
+        XCTAssertEqual(c.adjustedPingInterval(lowPowerMode: false, lowDataMode: false), 1, accuracy: 0.001)
+        XCTAssertEqual(c.adjustedPingInterval(lowPowerMode: true, lowDataMode: false), 5, accuracy: 0.001)
+        XCTAssertEqual(c.adjustedPingInterval(lowPowerMode: false, lowDataMode: true), 5, accuracy: 0.001)
+        XCTAssertEqual(c.adjustedPingInterval(lowPowerMode: true, lowDataMode: true), 25, accuracy: 0.001)
+    }
+
+    /// `runDNSTick` passes this list as UDP fallbacks; hosts excluded here receive no DNS probes under LDM.
+    func testFallbackDNSServersForProbesFiltersWhenLowDataModeActive() {
+        var c = AppConfig.defaults
+        c.pingCloudflareEnabled = true
+        c.pingGoogleEnabled = true
+        c.lowDataModeUseCloudflare = true
+        c.lowDataModeUseGoogle = false
+        XCTAssertEqual(c.fallbackDNSServersForProbes(lowDataModePathActive: false), ["1.1.1.1", "8.8.8.8"])
+        XCTAssertEqual(c.fallbackDNSServersForProbes(lowDataModePathActive: true), ["1.1.1.1"])
+    }
+
+    func testHealthEvaluatorDoesNotTreatSkippedICMPAsAllMonitoredTimedOut() {
+        let evaluator = HealthEvaluator()
+        let now = Date()
+        let timedOut = PingSample(
+            timestamp: now,
+            success: false,
+            rttMs: nil,
+            timedOut: true,
+            message: "timeout"
+        )
+        let cloudflare = EndpointStatus(
+            id: "cloudflare",
+            label: "Cloudflare",
+            host: "1.1.1.1",
+            kind: .cloudflare,
+            meanLast5Ms: nil,
+            last10: [],
+            latest: timedOut,
+            icmpProbingActive: false,
+            dnsProbingActive: false
+        )
+        let input = HealthEvaluationInput(
+            context: .init(
+                connected: true,
+                interfaceName: "en0",
+                interfaceType: "Wi-Fi",
+                localIP: "10.0.0.2",
+                gatewayIP: "10.0.0.1",
+                dnsServers: ["1.1.1.1"]
+            ),
+            endpointStatuses: [.cloudflare: cloudflare],
+            dnsStatus: DNSCheckStatus(lastCheck: now, resolvedIPs: ["17.253.144.10"]),
+            config: .defaults,
+            lowDataModePathActive: false
+        )
+        let confirmations = AppConfig.defaults.statusChangeConfirmationCount
+        for _ in 0 ..< confirmations {
+            _ = evaluator.evaluate(input)
+        }
+        let snapshot = evaluator.evaluate(input)
+        XCTAssertNotEqual(snapshot.state, .offline)
+        XCTAssertFalse(snapshot.reason.contains("All monitored endpoints timed out"))
+    }
+
+    func testHealthEvaluatorAppendsLowDataModeSuffixToReason() {
+        let evaluator = HealthEvaluator()
+        let now = Date()
+        let cloudflare = EndpointStatus(
+            id: "cloudflare",
+            label: "Cloudflare",
+            host: "1.1.1.1",
+            kind: .cloudflare,
+            meanLast5Ms: 20,
+            last10: [],
+            latest: .init(timestamp: now, success: true, rttMs: 20, timedOut: false, message: "ok"),
+            icmpProbingActive: true,
+            dnsProbingActive: true
+        )
+        let input = HealthEvaluationInput(
+            context: .init(
+                connected: true,
+                interfaceName: "en0",
+                interfaceType: "Wi-Fi",
+                localIP: "10.0.0.2",
+                gatewayIP: "10.0.0.1",
+                dnsServers: ["1.1.1.1"]
+            ),
+            endpointStatuses: [.cloudflare: cloudflare],
+            dnsStatus: DNSCheckStatus(),
+            config: .defaults,
+            lowDataModePathActive: true
+        )
+        let confirmations = AppConfig.defaults.statusChangeConfirmationCount
+        for _ in 0 ..< confirmations {
+            _ = evaluator.evaluate(input)
+        }
+        let snapshot = evaluator.evaluate(input)
+        XCTAssertTrue(snapshot.reason.hasSuffix(" – Low Data Mode"))
     }
 
     func testCollectNameserversFromScutilKeepsFullIPv6Literal() {
@@ -375,5 +488,76 @@ final class PingStatTests: XCTestCase {
         let scoped = DNSUDPQuery.parseIPv6Nameserver("fe80::1%lo0")
         XCTAssertEqual(scoped?.address, "fe80::1")
         XCTAssertEqual(scoped?.scopeId, lo)
+    }
+
+    // MARK: - Low Data Mode probe eligibility
+
+    /// Ping/DNS loops only hit endpoints with `icmpProbingActive` / `dnsProbingActive`; those flags are set from
+    /// `LowDataModeProbeEligibility`, matching `NetworkMonitorViewModel.rebuildEndpoints()`.
+    func testLowDataModeDisablesWANICMPAndDNSWhenPerResolverLDMToggleOff() {
+        var c = AppConfig.defaults
+        c.lowDataModeUseGoogle = false
+        XCTAssertFalse(
+            LowDataModeProbeEligibility.wanProbingEligible(lowDataModePathActive: true, config: c, kind: .google),
+            "LDM on and “Use in Low Data Mode” off for Google ⇒ no ICMP/DNS to that resolver"
+        )
+    }
+
+    func testLowDataModeAllowsWANProbesWhenPerResolverLDMToggleOn() {
+        var c = AppConfig.defaults
+        c.lowDataModeUseCloudflare = true
+        XCTAssertTrue(
+            LowDataModeProbeEligibility.wanProbingEligible(lowDataModePathActive: true, config: c, kind: .cloudflare)
+        )
+    }
+
+    func testWANProbesIgnoreLDMResolverTogglesWhenLowDataModePathInactive() {
+        var c = AppConfig.defaults
+        c.lowDataModeUseGoogle = false
+        XCTAssertTrue(
+            LowDataModeProbeEligibility.wanProbingEligible(lowDataModePathActive: false, config: c, kind: .google),
+            "Normal path: probes run to all master-enabled WAN targets regardless of LDM toggles"
+        )
+    }
+
+    func testLowDataModeNeverSendsGatewayICMP() {
+        XCTAssertFalse(LowDataModeProbeEligibility.gatewayICMPProbingActive(lowDataModePathActive: true))
+        XCTAssertTrue(LowDataModeProbeEligibility.gatewayICMPProbingActive(lowDataModePathActive: false))
+    }
+
+    func testLowDataModeGatewayDNSEnabledOnlyWithLocalNetworkLDMToggle() {
+        var c = AppConfig.defaults
+        c.lowDataModeUseLocalNetworkDNS = false
+        XCTAssertFalse(
+            LowDataModeProbeEligibility.gatewayDNSProbingActive(lowDataModePathActive: true, config: c),
+            "LDM on without “Use system DNS in Low Data Mode” ⇒ no DNS probes to system resolvers"
+        )
+        c.lowDataModeUseLocalNetworkDNS = true
+        XCTAssertTrue(LowDataModeProbeEligibility.gatewayDNSProbingActive(lowDataModePathActive: true, config: c))
+    }
+
+    func testLowDataModeDisablesCustomICMPAndDNSWhenUseInLowDataModeOff() {
+        let target = CustomPingTarget(
+            label: "x",
+            ipAddress: "10.0.0.5",
+            dnsProbesEnabled: true,
+            useInLowDataMode: false
+        )
+        XCTAssertFalse(LowDataModeProbeEligibility.customICMPProbingActive(lowDataModePathActive: true, target: target))
+        XCTAssertFalse(LowDataModeProbeEligibility.customDNSProbingActive(lowDataModePathActive: true, target: target))
+    }
+
+    func testLowDataModeCustomDNSOffWhenDNSToggleOffEvenIfUseInLowDataModeOn() {
+        let target = CustomPingTarget(
+            label: "x",
+            ipAddress: "10.0.0.5",
+            dnsProbesEnabled: false,
+            useInLowDataMode: true
+        )
+        XCTAssertTrue(LowDataModeProbeEligibility.customICMPProbingActive(lowDataModePathActive: true, target: target))
+        XCTAssertFalse(
+            LowDataModeProbeEligibility.customDNSProbingActive(lowDataModePathActive: true, target: target),
+            "No DNS column ⇒ no DNS probes"
+        )
     }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var viewModel: NetworkMonitorViewModel
+    @State private var expandedWanTargets: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -11,10 +12,6 @@ struct SettingsView: View {
 
             ScrollView {
                 Form {
-                    Section {
-                        LabeledContent("Version", value: AppVersion.marketingAndBuild)
-                    }
-
                     Section {
                         Toggle("Launch at Login", isOn: binding(\.launchAtLoginEnabled))
                     }
@@ -73,11 +70,41 @@ struct SettingsView: View {
                     }
 
                     Section("WAN Targets") {
-                        Toggle("Cloudflare", isOn: binding(\.pingCloudflareEnabled))
-                        Toggle("Google", isOn: binding(\.pingGoogleEnabled))
-                        Toggle("OpenDNS", isOn: binding(\.pingOpenDNSEnabled))
-                        Toggle("CenturyLink", isOn: binding(\.pingLevel3Enabled))
-                        Toggle("Quad9", isOn: binding(\.pingQuad9Enabled))
+                        wanTargetDisclosure(
+                            title: "Cloudflare",
+                            enabled: binding(\.pingCloudflareEnabled),
+                            lowDataMode: binding(\.lowDataModeUseCloudflare)
+                        )
+                        wanTargetDisclosure(
+                            title: "Google",
+                            enabled: binding(\.pingGoogleEnabled),
+                            lowDataMode: binding(\.lowDataModeUseGoogle)
+                        )
+                        wanTargetDisclosure(
+                            title: "OpenDNS",
+                            enabled: binding(\.pingOpenDNSEnabled),
+                            lowDataMode: binding(\.lowDataModeUseOpenDNS)
+                        )
+                        wanTargetDisclosure(
+                            title: "CenturyLink",
+                            enabled: binding(\.pingLevel3Enabled),
+                            lowDataMode: binding(\.lowDataModeUseLevel3)
+                        )
+                        wanTargetDisclosure(
+                            title: "Quad9",
+                            enabled: binding(\.pingQuad9Enabled),
+                            lowDataMode: binding(\.lowDataModeUseQuad9)
+                        )
+                    }
+
+                    Section("Local Network") {
+                        Text(
+                            "ICMP to the default gateway is never sent while Low Data Mode is active. You can still allow DNS probes against your system-configured resolvers (popover “Local Network” DNS column)."
+                        )
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        Toggle("Use system DNS in Low Data Mode", isOn: binding(\.lowDataModeUseLocalNetworkDNS))
                     }
 
                     Section("Custom Targets") {
@@ -89,6 +116,11 @@ struct SettingsView: View {
                                 viewModel.settingsStore.config.customTarget == nil
                                     ? "Enter a label or IP address to enable this option."
                                     : "When on, DNS resolution for this target’s hostnames uses your custom nameservers (same as the popover “DNS” column)."
+                            )
+                        Toggle("Use in Low Data Mode", isOn: customUseInLowDataModeBinding())
+                            .disabled(viewModel.settingsStore.config.customTarget == nil)
+                            .help(
+                                "When Low Data Mode is active (constrained or expensive network path), allow ICMP and DNS probes for this custom target."
                             )
                         Button("Clear custom target") {
                             viewModel.settingsStore.config.customTarget = nil
@@ -304,11 +336,59 @@ struct SettingsView: View {
         )
     }
 
+    @ViewBuilder
+    private func wanTargetDisclosure(title: String, enabled: Binding<Bool>, lowDataMode: Binding<Bool>) -> some View {
+        let isExpanded = expandedWanTargets.contains(title)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if isExpanded {
+                            expandedWanTargets.remove(title)
+                        } else {
+                            expandedWanTargets.insert(title)
+                        }
+                    }
+                } label: {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14, alignment: .center)
+                        Text(title)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Toggle("", isOn: enabled)
+                    .labelsHidden()
+                    .accessibilityLabel(title)
+                    .accessibilityHint("Enable or disable monitoring for this resolver")
+            }
+            if isExpanded {
+                Toggle("Use in Low Data Mode", isOn: lowDataMode)
+                    .disabled(!enabled.wrappedValue)
+                    .help("Allow ICMP and DNS probes for this resolver while Low Data Mode is active.")
+                    .padding(.leading, 24)
+                    .padding(.trailing, 2)
+                    .padding(.top, 12)
+                    .padding(.bottom, 14)
+            }
+        }
+    }
+
     private func customLabelBinding() -> Binding<String> {
         Binding(
             get: { viewModel.settingsStore.config.customTarget?.label ?? "" },
             set: { newValue in
-                var target = viewModel.settingsStore.config.customTarget ?? CustomPingTarget(label: "", ipAddress: "", dnsProbesEnabled: false)
+                var target =
+                    viewModel.settingsStore.config.customTarget
+                    ?? CustomPingTarget(label: "", ipAddress: "", dnsProbesEnabled: false, useInLowDataMode: false)
                 target.label = newValue
                 if target.label.isEmpty && target.ipAddress.isEmpty {
                     viewModel.settingsStore.config.customTarget = nil
@@ -323,7 +403,9 @@ struct SettingsView: View {
         Binding(
             get: { viewModel.settingsStore.config.customTarget?.ipAddress ?? "" },
             set: { newValue in
-                var target = viewModel.settingsStore.config.customTarget ?? CustomPingTarget(label: "", ipAddress: "", dnsProbesEnabled: false)
+                var target =
+                    viewModel.settingsStore.config.customTarget
+                    ?? CustomPingTarget(label: "", ipAddress: "", dnsProbesEnabled: false, useInLowDataMode: false)
                 target.ipAddress = newValue
                 if target.label.isEmpty && target.ipAddress.isEmpty {
                     viewModel.settingsStore.config.customTarget = nil
@@ -340,6 +422,17 @@ struct SettingsView: View {
             set: { newValue in
                 guard var target = viewModel.settingsStore.config.customTarget else { return }
                 target.dnsProbesEnabled = newValue
+                viewModel.settingsStore.config.customTarget = target
+            }
+        )
+    }
+
+    private func customUseInLowDataModeBinding() -> Binding<Bool> {
+        Binding(
+            get: { viewModel.settingsStore.config.customTarget?.useInLowDataMode ?? false },
+            set: { newValue in
+                guard var target = viewModel.settingsStore.config.customTarget else { return }
+                target.useInLowDataMode = newValue
                 viewModel.settingsStore.config.customTarget = target
             }
         )

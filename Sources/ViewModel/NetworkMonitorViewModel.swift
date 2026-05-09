@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 import AppKit
+import Network
 
 @MainActor
 final class NetworkMonitorViewModel: ObservableObject {
@@ -19,6 +20,8 @@ final class NetworkMonitorViewModel: ObservableObject {
         updatedAt: Date()
     )
     @Published private(set) var lowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
+    /// Satisfied path that is constrained or expensive (Apple APIs); shown in UI as **Low Data Mode**.
+    @Published private(set) var lowDataModePathActive = false
     @Published private(set) var notificationBannerHelp: NotificationBannerHelp = .unknown
 
     let settingsStore: SettingsStore
@@ -37,6 +40,8 @@ final class NetworkMonitorViewModel: ObservableObject {
     private var dnsLoopTask: Task<Void, Never>?
     private var powerModeObserver: NSObjectProtocol?
     private var workspaceWakeObserver: NSObjectProtocol?
+    private var lowDataPathMonitor: NWPathMonitor?
+    private let lowDataPathQueue = DispatchQueue(label: "PingStat.lowDataPath")
     private var previousState: NetworkHealthState = .offline
     private var previousDNSFiltering = false
     /// Health-related notification toasts are suppressed until this time (set in `start()`).
@@ -101,6 +106,7 @@ final class NetworkMonitorViewModel: ObservableObject {
             notificationService.requestAuthorizationIfNeeded()
         }
         networkContextService.start()
+        startLowDataPathMonitoring()
         rebuildEndpoints()
         observePowerMode()
         observeSystemWake()
@@ -118,6 +124,8 @@ final class NetworkMonitorViewModel: ObservableObject {
         dnsLoopTask?.cancel()
         pingLoopTask = nil
         dnsLoopTask = nil
+        lowDataPathMonitor?.cancel()
+        lowDataPathMonitor = nil
         networkContextService.stop()
         if let powerModeObserver {
             NotificationCenter.default.removeObserver(powerModeObserver)
@@ -281,13 +289,44 @@ final class NetworkMonitorViewModel: ObservableObject {
         requestHealthEvaluation()
     }
 
+    private func startLowDataPathMonitoring() {
+        lowDataPathMonitor?.cancel()
+        let mon = NWPathMonitor()
+        mon.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.applyLowDataModePath(path)
+            }
+        }
+        mon.start(queue: lowDataPathQueue)
+        lowDataPathMonitor = mon
+        applyLowDataModePath(mon.currentPath)
+    }
+
+    private func applyLowDataModePath(_ path: NWPath) {
+        let active = path.status == .satisfied && (path.isConstrained || path.isExpensive)
+        guard active != lowDataModePathActive else { return }
+        lowDataModePathActive = active
+        logging.log(
+            .notice,
+            category: .lifecycle,
+            "Low Data Mode path active=\(active) status=\(String(describing: path.status)) constrained=\(path.isConstrained) expensive=\(path.isExpensive)"
+        )
+        rebuildEndpoints()
+        startPingLoop()
+        startDNSLoop()
+        requestHealthEvaluation()
+    }
+
     private func startPingLoop() {
         pingLoopTask?.cancel()
         pingLoopTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 await self.runPingTick()
-                let interval = self.settingsStore.config.adjustedPingInterval(lowPowerMode: self.lowPowerModeEnabled)
+                let interval = self.settingsStore.config.adjustedPingInterval(
+                    lowPowerMode: self.lowPowerModeEnabled,
+                    lowDataMode: self.lowDataModePathActive
+                )
                 await Self.sleepSecondsClamped(interval)
             }
         }
@@ -299,7 +338,10 @@ final class NetworkMonitorViewModel: ObservableObject {
             guard let self else { return }
             while !Task.isCancelled {
                 await self.runDNSTick()
-                let interval = self.settingsStore.config.adjustedDNSInterval(lowPowerMode: self.lowPowerModeEnabled)
+                let interval = self.settingsStore.config.adjustedDNSInterval(
+                    lowPowerMode: self.lowPowerModeEnabled,
+                    lowDataMode: self.lowDataModePathActive
+                )
                 await Self.sleepSecondsClamped(interval)
             }
         }
@@ -320,7 +362,7 @@ final class NetworkMonitorViewModel: ObservableObject {
         guard ConnectivityProbePolicy.shouldRunICMPProbes(pathSatisfied: context.connected) else {
             return
         }
-        let targets = endpoints.map {
+        let targets = endpoints.filter(\.icmpProbingActive).map {
             PingTarget(
                 id: $0.id,
                 label: $0.label,
@@ -328,7 +370,10 @@ final class NetworkMonitorViewModel: ObservableObject {
                 kind: $0.kind
             )
         }
-        guard !targets.isEmpty else { return }
+        guard !targets.isEmpty else {
+            requestHealthEvaluation()
+            return
+        }
 
         let timeoutMs = settingsStore.config.servicePingTimeoutMs
         let responses = await withTaskGroup(of: PingResponse.self, returning: [PingResponse].self) { group in
@@ -363,22 +408,41 @@ final class NetworkMonitorViewModel: ObservableObject {
         guard ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: context.connected) else {
             return
         }
+        let cfg = settingsStore.config
+        let ldm = lowDataModePathActive
+        let skipSystemResolverProbes = ldm && !cfg.lowDataModeUseLocalNetworkDNS
+        let configuredServers: [String] = skipSystemResolverProbes
+            ? []
+            : context.dnsServers.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let fallbackServers = cfg.fallbackDNSServersForProbes(lowDataModePathActive: ldm)
         let customNameservers: [String] = {
-            guard let t = settingsStore.config.customTarget, t.dnsProbesEnabled else { return [] }
+            guard let t = cfg.customTarget, t.dnsProbesEnabled else { return [] }
+            guard !ldm || t.useInLowDataMode else { return [] }
             let ip = t.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
             return ip.isEmpty ? [] : [ip]
         }()
+        let hasWork =
+            !configuredServers.isEmpty || !fallbackServers.isEmpty || !customNameservers.isEmpty
+        guard hasWork else {
+            dnsStatus = DNSCheckStatus()
+            requestHealthEvaluation()
+            return
+        }
         let result = await dnsService.check(
-            probeHostname: settingsStore.config.sanitizedDNSProbeHostname,
-            configuredServers: context.dnsServers,
-            fallbackServers: settingsStore.config.fallbackDNSServers,
+            probeHostname: cfg.sanitizedDNSProbeHostname,
+            configuredServers: configuredServers,
+            fallbackServers: fallbackServers,
             customNameservers: customNameservers,
-            timeoutMs: settingsStore.config.servicePingTimeoutMs
+            timeoutMs: cfg.servicePingTimeoutMs,
+            skipSystemResolverProbes: skipSystemResolverProbes && configuredServers.isEmpty
         )
         dnsStatus = result.status
         recordDNSProbeHistory(result.status)
 
-        let shouldNotifyFiltering = result.status.allConfiguredTimedOut && result.status.fallbackWorked
+        let shouldNotifyFiltering =
+            result.status.allConfiguredTimedOut
+            && result.status.fallbackWorked
+            && !result.status.systemResolverProbesSkipped
         if shouldNotifyFiltering {
             if !previousDNSFiltering, healthToastsPermitted() {
                 notificationService.notifyDNSFiltering(cooldownSeconds: settingsStore.config.notificationCooldownSeconds)
@@ -421,7 +485,8 @@ final class NetworkMonitorViewModel: ObservableObject {
             context: context,
             endpointStatuses: map,
             dnsStatus: dnsStatus,
-            config: settingsStore.config
+            config: settingsStore.config,
+            lowDataModePathActive: lowDataModePathActive
         )
         let updated = healthEvaluator.evaluate(input)
         snapshot = updated
@@ -450,8 +515,12 @@ final class NetworkMonitorViewModel: ObservableObject {
     }
 
     private func rebuildEndpoints() {
+        let ldm = lowDataModePathActive
+        let cfg = settingsStore.config
         var newEndpoints: [EndpointStatus] = []
         if let gateway = context.gatewayIP, !gateway.isEmpty {
+            let gatewayICMP = LowDataModeProbeEligibility.gatewayICMPProbingActive(lowDataModePathActive: ldm)
+            let gatewayDNS = LowDataModeProbeEligibility.gatewayDNSProbingActive(lowDataModePathActive: ldm, config: cfg)
             newEndpoints.append(EndpointStatus(
                 id: "gateway",
                 label: "Gateway",
@@ -459,7 +528,9 @@ final class NetworkMonitorViewModel: ObservableObject {
                 kind: .gateway,
                 meanLast5Ms: nil,
                 last10: [],
-                latest: nil
+                latest: nil,
+                icmpProbingActive: gatewayICMP,
+                dnsProbingActive: gatewayDNS
             ))
         }
         let wanIdByKind: [EndpointKind: String] = [
@@ -476,9 +547,10 @@ final class NetworkMonitorViewModel: ObservableObject {
             .level3: "CenturyLink",
             .quad9: "Quad9"
         ]
-        for (kind, host) in settingsStore.config.enabledWanResolverTargets {
+        for (kind, host) in cfg.enabledWanResolverTargets {
             guard let id = wanIdByKind[kind] else { continue }
             let label = wanLabelByKind[kind] ?? host
+            let eligible = LowDataModeProbeEligibility.wanProbingEligible(lowDataModePathActive: ldm, config: cfg, kind: kind)
             newEndpoints.append(EndpointStatus(
                 id: id,
                 label: label,
@@ -486,13 +558,17 @@ final class NetworkMonitorViewModel: ObservableObject {
                 kind: kind,
                 meanLast5Ms: nil,
                 last10: [],
-                latest: nil
+                latest: nil,
+                icmpProbingActive: eligible,
+                dnsProbingActive: eligible
             ))
         }
 
-        if let customTarget = settingsStore.config.customTarget,
+        if let customTarget = cfg.customTarget,
            !customTarget.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            !customTarget.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let icmpOn = LowDataModeProbeEligibility.customICMPProbingActive(lowDataModePathActive: ldm, target: customTarget)
+            let dnsOn = LowDataModeProbeEligibility.customDNSProbingActive(lowDataModePathActive: ldm, target: customTarget)
             newEndpoints.append(EndpointStatus(
                 id: "custom",
                 label: customTarget.label,
@@ -500,7 +576,9 @@ final class NetworkMonitorViewModel: ObservableObject {
                 kind: .custom,
                 meanLast5Ms: nil,
                 last10: [],
-                latest: nil
+                latest: nil,
+                icmpProbingActive: icmpOn,
+                dnsProbingActive: dnsOn
             ))
         }
         endpoints = newEndpoints
@@ -518,7 +596,7 @@ final class NetworkMonitorViewModel: ObservableObject {
         guard !status.lastResolverDetailLines.isEmpty else { return }
         var next = dnsProbeHistoryByNameserver
         for detail in status.lastResolverDetailLines {
-            guard let key = Self.nameserverKey(fromProbeDetailLine: detail) else { continue }
+            guard let key = DNSProbeDetailLine.nameserverKey(from: detail) else { continue }
             let prefixed = "\(ts) \(detail)"
             var bucket = next[key] ?? []
             bucket.append(prefixed)
@@ -529,15 +607,6 @@ final class NetworkMonitorViewModel: ObservableObject {
             next[key] = bucket
         }
         dnsProbeHistoryByNameserver = next
-    }
-
-    private static func nameserverKey(fromProbeDetailLine detail: String) -> String? {
-        guard let at = detail.firstIndex(of: "@") else { return nil }
-        let afterAt = detail[detail.index(after: at)...]
-        if let space = afterAt.firstIndex(of: " ") {
-            return String(afterAt[..<space])
-        }
-        return String(afterAt).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static let dnsProbeHistoryTimeFormatter: DateFormatter = {

@@ -82,8 +82,37 @@ struct StatusPopoverView: View {
         return viewModel.endpoints.first(where: { $0.id == selectedEndpointID })
     }
 
+    private var networkHealthSubtitle: String {
+        let base = "Network \(viewModel.snapshot.state.title)"
+        guard viewModel.lowDataModePathActive else { return base }
+        return "\(base) – Low Data Mode"
+    }
+
+    /// Row is master-shown but all probes are off because Low Data Mode is active (popover shows a compact gray status).
+    private func endpointFullyLDMPaused(_ endpoint: EndpointStatus) -> Bool {
+        viewModel.lowDataModePathActive && !endpoint.icmpProbingActive && !endpoint.dnsProbingActive
+    }
+
+    @ViewBuilder
+    private func lowDataModePausedTrailing(showChevron: Bool) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            Image(systemName: "network.slash")
+                .font(.body.weight(.medium))
+                .foregroundStyle(.secondary)
+            Text("Low Data Mode")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if showChevron {
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
     private var detailFooterVersionRow: some View {
-        Text("Version \(AppVersion.marketingAndBuild)")
+        Text("Version \(AppVersion.marketing)")
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,7 +136,7 @@ struct StatusPopoverView: View {
                     Text(AppBranding.productName)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text("Network \(viewModel.snapshot.state.title)")
+                    Text(networkHealthSubtitle)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -152,13 +181,18 @@ struct StatusPopoverView: View {
                 }
             }
             ForEach(customEndpointsForSummary) { endpoint in
-                Button {
-                    selectedEndpointID = endpoint.id
-                } label: {
+                if endpoint.isFullyProbePaused {
                     consolidatedCustomRow(endpoint)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Button {
+                        selectedEndpointID = endpoint.id
+                    } label: {
+                        consolidatedCustomRow(endpoint)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             summaryFooterRow
                 .padding(.top, 4)
@@ -168,6 +202,7 @@ struct StatusPopoverView: View {
 
     /// Local row always contributes one DNS cell (primary resolver), same as the list above.
     private var summaryPrimaryDnsIsGreen: Bool {
+        guard let gw = gatewayEndpoint, gw.dnsProbingActive else { return false }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return false }
         guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else { return false }
@@ -181,34 +216,36 @@ struct StatusPopoverView: View {
     private var summaryDnsGreenCount: Int {
         var n = 0
         if summaryPrimaryDnsIsGreen { n += 1 }
-        for ep in wanEndpointsForSummary where viewModel.dnsStatus.fallbackAnsweredByServer[ep.host] == true {
+        for ep in wanEndpointsForSummary
+            where ep.dnsProbingActive && viewModel.dnsStatus.fallbackAnsweredByServer[ep.host] == true {
             n += 1
         }
         for ep in customEndpointsForSummary {
-            guard summaryCustomRowShowsDNS(ep) else { continue }
+            guard summaryCustomRowShowsDNS(ep), ep.dnsProbingActive else { continue }
             if viewModel.dnsStatus.customNameserverProbes[ep.host] == true { n += 1 }
         }
         return n
     }
 
     private var summaryDnsTotalCount: Int {
-        var n = 1
-        n += wanEndpointsForSummary.count
-        n += customEndpointsForSummary.filter { summaryCustomRowShowsDNS($0) }.count
+        var n = 0
+        if gatewayEndpoint?.dnsProbingActive == true { n += 1 }
+        n += wanEndpointsForSummary.filter(\.dnsProbingActive).count
+        n += customEndpointsForSummary.filter { summaryCustomRowShowsDNS($0) && $0.dnsProbingActive }.count
         return n
     }
 
     private var summaryMeanPingAcrossActiveMs: Double? {
         var values: [Double] = []
-        if let gw = gatewayEndpoint, gw.latest?.success == true, let m = gw.meanLast5Ms {
+        if let gw = gatewayEndpoint, gw.icmpProbingActive, gw.latest?.success == true, let m = gw.meanLast5Ms {
             values.append(m)
         }
         for ep in wanEndpointsForSummary {
-            guard ep.latest?.success == true, let m = ep.meanLast5Ms else { continue }
+            guard ep.icmpProbingActive, ep.latest?.success == true, let m = ep.meanLast5Ms else { continue }
             values.append(m)
         }
         for ep in customEndpointsForSummary {
-            guard ep.latest?.success == true, let m = ep.meanLast5Ms else { continue }
+            guard ep.icmpProbingActive, ep.latest?.success == true, let m = ep.meanLast5Ms else { continue }
             values.append(m)
         }
         guard !values.isEmpty else { return nil }
@@ -224,7 +261,7 @@ struct StatusPopoverView: View {
             pingPart = "—"
         }
         return HStack(alignment: .center, spacing: 8) {
-            Text("Version \(AppVersion.marketingAndBuild)")
+            Text("Version \(AppVersion.marketing)")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
@@ -277,6 +314,7 @@ struct StatusPopoverView: View {
     @ViewBuilder
     private var consolidatedLocalNetworkRow: some View {
         if let gatewayID = gatewayEndpointID, let gw = gatewayEndpoint {
+            let pingVisual = summaryPingVisual(for: gw)
             Button {
                 selectedEndpointID = gatewayID
             } label: {
@@ -284,12 +322,16 @@ struct StatusPopoverView: View {
                     leading: { SummaryRowLeading.localNetwork },
                     title: "Local Network",
                     subtitle: gw.host,
-                    pingIcon: endpointIcon(gw),
-                    pingTint: endpointColor(gw),
-                    pingMsText: viewModel.meanText(for: gw),
-                    dnsSymbol: primaryDNSSymbol,
+                    pingIcon: pingVisual.icon,
+                    pingTint: pingVisual.color,
+                    pingMsText: summaryPingMsText(for: gw),
+                    dnsSymbol: primaryDNSSymbol(gateway: gw),
                     dnsTint: primaryDNSTint(gatewayForTeal: gw),
-                    showChevron: true
+                    showChevron: true,
+                    dnsColumnActive: gw.dnsProbingActive,
+                    pingColumnActive: gw.icmpProbingActive
+                        || (viewModel.lowDataModePathActive && gw.dnsProbingActive),
+                    showLowDataModePausedIndicator: endpointFullyLDMPaused(gw)
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -302,16 +344,19 @@ struct StatusPopoverView: View {
                 pingIcon: viewModel.context.connected ? "checkmark.circle.fill" : "xmark.octagon.fill",
                 pingTint: viewModel.context.connected ? HealthAppearance.successGreen(for: colorScheme) : .red,
                 pingMsText: "—",
-                dnsSymbol: primaryDNSSymbol,
+                dnsSymbol: primaryDNSSymbol(gateway: nil),
                 dnsTint: primaryDNSTint(gatewayForTeal: nil),
-                showChevron: false
+                showChevron: false,
+                dnsColumnActive: true,
+                pingColumnActive: true
             )
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private func consolidatedWanRow(_ endpoint: EndpointStatus) -> some View {
-        consolidatedRow(
+        let pingVisual = summaryPingVisual(for: endpoint)
+        return consolidatedRow(
             leading: {
                 switch endpoint.kind {
                 case .cloudflare:
@@ -330,29 +375,36 @@ struct StatusPopoverView: View {
             },
             title: endpoint.label,
             subtitle: endpoint.host,
-            pingIcon: endpointIcon(endpoint),
-            pingTint: endpointColor(endpoint),
-            pingMsText: viewModel.meanText(for: endpoint),
-            dnsSymbol: fallbackDNSSymbol(host: endpoint.host),
+            pingIcon: pingVisual.icon,
+            pingTint: pingVisual.color,
+            pingMsText: summaryPingMsText(for: endpoint),
+            dnsSymbol: fallbackDNSSymbol(endpoint: endpoint),
             dnsTint: fallbackDNSTint(endpoint: endpoint),
-            showChevron: true
+            showChevron: true,
+            dnsColumnActive: endpoint.dnsProbingActive,
+            pingColumnActive: endpoint.icmpProbingActive,
+            showLowDataModePausedIndicator: endpointFullyLDMPaused(endpoint)
         )
     }
 
     private func consolidatedCustomRow(_ endpoint: EndpointStatus) -> some View {
         let dnsOn = viewModel.settingsStore.config.customTarget?.dnsProbesEnabled == true
+        let pingVisual = summaryPingVisual(for: endpoint)
         return consolidatedRow(
             leading: { SummaryRowLeading.customTarget },
             title: endpoint.label,
             subtitle: endpoint.host,
-            pingIcon: endpointIcon(endpoint),
-            pingTint: endpointColor(endpoint),
-            pingMsText: viewModel.meanText(for: endpoint),
-            dnsSymbol: dnsOn ? customDNSSymbol(host: endpoint.host) : "minus.circle.fill",
+            pingIcon: pingVisual.icon,
+            pingTint: pingVisual.color,
+            pingMsText: summaryPingMsText(for: endpoint),
+            dnsSymbol: dnsOn ? customDNSSymbol(endpoint: endpoint) : "minus.circle.fill",
             dnsTint: dnsOn ? customDNSTint(endpoint: endpoint) : .secondary,
-            showChevron: true,
+            showChevron: !endpoint.isFullyProbePaused,
             dnsLabel: dnsOn ? "DNS" : "—",
-            showDNSColumn: dnsOn
+            showDNSColumn: dnsOn,
+            dnsColumnActive: endpoint.dnsProbingActive,
+            pingColumnActive: endpoint.icmpProbingActive,
+            showLowDataModePausedIndicator: endpointFullyLDMPaused(endpoint)
         )
     }
 
@@ -367,7 +419,10 @@ struct StatusPopoverView: View {
         dnsTint: Color,
         showChevron: Bool,
         dnsLabel: String = "DNS",
-        showDNSColumn: Bool = true
+        showDNSColumn: Bool = true,
+        dnsColumnActive: Bool = true,
+        pingColumnActive: Bool = true,
+        showLowDataModePausedIndicator: Bool = false
     ) -> some View {
         HStack(alignment: .center, spacing: 8) {
             leading()
@@ -386,27 +441,39 @@ struct StatusPopoverView: View {
                     .textSelection(.enabled)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                if showDNSColumn {
-                    Image(systemName: dnsSymbol)
-                        .foregroundColor(dnsTint)
-                        .font(.body.weight(.medium))
-                    Text(dnsLabel)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Image(systemName: pingIcon)
-                    .foregroundColor(pingTint)
-                    .font(.body.weight(.medium))
-                Text(pingMsText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .fixedSize(horizontal: true, vertical: false)
-                if showChevron {
-                    Image(systemName: "chevron.right")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.tertiary)
+            Group {
+                if showLowDataModePausedIndicator {
+                    lowDataModePausedTrailing(showChevron: showChevron)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if showDNSColumn {
+                            Group {
+                                Image(systemName: dnsSymbol)
+                                    .foregroundColor(dnsTint)
+                                    .font(.body.weight(.medium))
+                                Text(dnsLabel)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .opacity(dnsColumnActive ? 1 : 0.42)
+                        }
+                        Group {
+                            Image(systemName: pingIcon)
+                                .foregroundColor(pingTint)
+                                .font(.body.weight(.medium))
+                            Text(pingMsText)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .opacity(pingColumnActive ? 1 : 0.42)
+                        if showChevron {
+                            Image(systemName: "chevron.right")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -419,7 +486,27 @@ struct StatusPopoverView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private var primaryDNSSymbol: String {
+    private func summaryPingMsText(for endpoint: EndpointStatus) -> String {
+        guard endpoint.icmpProbingActive else { return "—" }
+        return viewModel.meanText(for: endpoint)
+    }
+
+    private func summaryPingVisual(for endpoint: EndpointStatus) -> (icon: String, color: Color) {
+        guard endpoint.icmpProbingActive else {
+            if viewModel.lowDataModePathActive,
+               endpoint.kind == .gateway,
+               endpoint.dnsProbingActive {
+                return ("network.slash", Color.secondary)
+            }
+            return ("minus.circle.fill", Color.secondary)
+        }
+        return (endpointIcon(endpoint), endpointColor(endpoint))
+    }
+
+    private func primaryDNSSymbol(gateway: EndpointStatus?) -> String {
+        if let gateway, !gateway.dnsProbingActive {
+            return "minus.circle.fill"
+        }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return "ellipsis.circle.fill" }
         guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else {
@@ -430,13 +517,16 @@ struct StatusPopoverView: View {
 
     /// Primary DNS column: teal when resolver answered and gateway ICMP mean matches blazing threshold (same rule as ``HealthEvaluator`` WAN blazing contributor).
     private func primaryDNSTint(gatewayForTeal: EndpointStatus?) -> Color {
+        if let gatewayForTeal, !gatewayForTeal.dnsProbingActive {
+            return .secondary
+        }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return .secondary }
         guard let resolver = viewModel.context.dnsServers.first, !resolver.isEmpty else { return .secondary }
         if dns.timedOutServers.contains(resolver) {
             return .red
         }
-        if let gw = gatewayForTeal, primaryDnsAnsweredOK, pingMeanQualifiesBlazing(gw) {
+        if let gw = gatewayForTeal, primaryDnsAnsweredOK, gw.icmpProbingActive, pingMeanQualifiesBlazing(gw) {
             return HealthAppearance.blazingAccentColor()
         }
         return HealthAppearance.successGreen(for: colorScheme)
@@ -449,35 +539,39 @@ struct StatusPopoverView: View {
         return !dns.timedOutServers.contains(resolver)
     }
 
-    private func fallbackDNSSymbol(host: String) -> String {
+    private func fallbackDNSSymbol(endpoint: EndpointStatus) -> String {
+        guard endpoint.dnsProbingActive else { return "minus.circle.fill" }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return "ellipsis.circle.fill" }
-        guard let ok = dns.fallbackAnsweredByServer[host] else { return "questionmark.circle.fill" }
+        guard let ok = dns.fallbackAnsweredByServer[endpoint.host] else { return "questionmark.circle.fill" }
         return ok ? "checkmark.circle.fill" : "xmark.circle.fill"
     }
 
     private func fallbackDNSTint(endpoint: EndpointStatus) -> Color {
+        guard endpoint.dnsProbingActive else { return .secondary }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return .secondary }
         guard let ok = dns.fallbackAnsweredByServer[endpoint.host] else { return .orange }
-        if ok, pingMeanQualifiesBlazing(endpoint) {
+        if ok, endpoint.icmpProbingActive, pingMeanQualifiesBlazing(endpoint) {
             return HealthAppearance.blazingAccentColor()
         }
         return ok ? HealthAppearance.successGreen(for: colorScheme) : .red
     }
 
-    private func customDNSSymbol(host: String) -> String {
+    private func customDNSSymbol(endpoint: EndpointStatus) -> String {
+        guard endpoint.dnsProbingActive else { return "minus.circle.fill" }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return "ellipsis.circle.fill" }
-        guard let ok = dns.customNameserverProbes[host] else { return "questionmark.circle.fill" }
+        guard let ok = dns.customNameserverProbes[endpoint.host] else { return "questionmark.circle.fill" }
         return ok ? "checkmark.circle.fill" : "xmark.circle.fill"
     }
 
     private func customDNSTint(endpoint: EndpointStatus) -> Color {
+        guard endpoint.dnsProbingActive else { return .secondary }
         let dns = viewModel.dnsStatus
         guard dns.lastCheck != nil else { return .secondary }
         guard let ok = dns.customNameserverProbes[endpoint.host] else { return .orange }
-        if ok, pingMeanQualifiesBlazing(endpoint) {
+        if ok, endpoint.icmpProbingActive, pingMeanQualifiesBlazing(endpoint) {
             return HealthAppearance.blazingAccentColor()
         }
         return ok ? HealthAppearance.successGreen(for: colorScheme) : .red
@@ -498,6 +592,9 @@ struct StatusPopoverView: View {
         }
         if dns.allConfiguredTimedOut, dns.fallbackWorked {
             lines.append("System resolver timed out; public DNS fallback probes still succeed.")
+        }
+        if dns.systemResolverProbesSkipped {
+            lines.append("Some Connection Targets are Paused (Low Data Mode)")
         }
         if dns.allConfiguredTimedOut, !dns.fallbackWorked, !dns.configuredServers.isEmpty {
             lines.append("All configured DNS servers and fallbacks failed the probe.")
@@ -566,10 +663,13 @@ struct StatusPopoverView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         ForEach(Array(dnsLines.enumerated()), id: \.offset) { _, line in
-                            Text(line)
-                                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                                .foregroundColor(terminalTextColor)
-                                .textSelection(.enabled)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                Text(line)
+                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                    .foregroundColor(terminalTextColor)
+                                    .textSelection(.enabled)
+                                    .lineLimit(1)
+                            }
                         }
                     }
                     Text("Last 10 ICMP pings")

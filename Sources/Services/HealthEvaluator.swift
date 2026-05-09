@@ -5,6 +5,7 @@ struct HealthEvaluationInput {
     let endpointStatuses: [EndpointKind: EndpointStatus]
     let dnsStatus: DNSCheckStatus
     let config: AppConfig
+    let lowDataModePathActive: Bool
 }
 
 @MainActor
@@ -85,43 +86,53 @@ final class HealthEvaluator {
 
     private func candidateState(for input: HealthEvaluationInput) -> (state: NetworkHealthState, reason: String) {
         if !input.context.connected {
-            return (.offline, "No local connectivity")
+            return suffixLDM((.offline, "No local connectivity"), input: input)
         }
 
-        if input.dnsStatus.allConfiguredTimedOut && !input.dnsStatus.fallbackWorked {
-            return (.offline, "DNS timed out on all servers")
+        if input.dnsStatus.allConfiguredTimedOut,
+           !input.dnsStatus.fallbackWorked,
+           !input.dnsStatus.systemResolverProbesSkipped {
+            return suffixLDM((.offline, "DNS timed out on all servers"), input: input)
         }
 
         if allMonitoredPingsTimedOut(endpointStatuses: input.endpointStatuses) {
-            return (.offline, "All monitored endpoints timed out")
+            return suffixLDM((.offline, "All monitored endpoints timed out"), input: input)
         }
 
         if input.dnsStatus.resolvedPrivateIP {
-            return (.degraded, "captive.apple.com resolved to private IP")
+            return suffixLDM((.degraded, "captive.apple.com resolved to private IP"), input: input)
         }
 
-        if input.dnsStatus.allConfiguredTimedOut && input.dnsStatus.fallbackWorked {
-            return (.degraded, "Primary DNS filtered; public DNS resolvers still work")
+        if input.dnsStatus.allConfiguredTimedOut,
+           input.dnsStatus.fallbackWorked,
+           !input.dnsStatus.systemResolverProbesSkipped {
+            return suffixLDM((.degraded, "Primary DNS filtered; public DNS resolvers still work"), input: input)
         }
 
         let wanMeansMs = Self.monitoredPublicResolverMeanMs(from: input)
         if wanMeansMs.contains(where: { $0 > input.config.degradedThresholdMs }) {
-            return (.degraded, "WAN mean latency above \(Int(input.config.degradedThresholdMs))ms")
+            return suffixLDM((.degraded, "WAN mean latency above \(Int(input.config.degradedThresholdMs))ms"), input: input)
         }
 
         if Self.isBlazing(wanMeansMs: wanMeansMs, config: input.config) {
-            return (.blazing, "WAN latency is excellent")
+            return suffixLDM((.blazing, "WAN latency is excellent"), input: input)
         }
 
         if Self.isHealthy(wanMeansMs: wanMeansMs, config: input.config) {
-            return (.healthy, "WAN means are <= \(Int(input.config.healthyThresholdMs))ms")
+            return suffixLDM((.healthy, "WAN means are <= \(Int(input.config.healthyThresholdMs))ms"), input: input)
         }
 
-        return (.healthy, "Connected with moderate latency")
+        return suffixLDM((.healthy, "Connected with moderate latency"), input: input)
+    }
+
+    private func suffixLDM(_ pair: (state: NetworkHealthState, reason: String), input: HealthEvaluationInput)
+        -> (state: NetworkHealthState, reason: String) {
+        guard input.lowDataModePathActive else { return pair }
+        return (pair.state, pair.reason + " – Low Data Mode")
     }
 
     private func allMonitoredPingsTimedOut(endpointStatuses: [EndpointKind: EndpointStatus]) -> Bool {
-        let monitors = Array(endpointStatuses.values)
+        let monitors = Array(endpointStatuses.values).filter(\.icmpProbingActive)
         guard !monitors.isEmpty else { return false }
         guard monitors.allSatisfy({ $0.latest != nil }) else { return false }
         return monitors.allSatisfy { status in
@@ -130,10 +141,13 @@ final class HealthEvaluator {
         }
     }
 
-    /// ICMP mean(5) for each enabled public resolver row (fixed WAN list), omitting unknowns.
+    /// ICMP mean(5) for each enabled public resolver row that is actively ICMP-probed, omitting unknowns.
     private static func monitoredPublicResolverMeanMs(from input: HealthEvaluationInput) -> [Double] {
         let kinds: [EndpointKind] = [.cloudflare, .google, .openDNS, .level3, .quad9]
-        return kinds.compactMap { input.endpointStatuses[$0]?.meanLast5Ms }
+        return kinds.compactMap { kind in
+            guard let ep = input.endpointStatuses[kind], ep.icmpProbingActive else { return nil }
+            return ep.meanLast5Ms
+        }
     }
 
     private static func isHealthy(wanMeansMs: [Double], config: AppConfig) -> Bool {
