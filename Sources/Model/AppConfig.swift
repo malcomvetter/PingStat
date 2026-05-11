@@ -78,6 +78,8 @@ struct AppConfig: Codable, Equatable {
     var lowDataModeUseQuad9: Bool
     /// Probe system-configured resolvers during Low Data Mode (gateway row DNS column only; ICMP to gateway stays off).
     var lowDataModeUseLocalNetworkDNS: Bool
+    /// VPN tolerance addition (ms): added to displayed / threshold ICMP mean for the VPN path row (tunnel overhead).
+    var vpnICMPOverheadPaddingMs: Double
 
     static let defaults = AppConfig(
         pingIntervalMs: 1_000,
@@ -104,7 +106,8 @@ struct AppConfig: Codable, Equatable {
         lowDataModeUseOpenDNS: false,
         lowDataModeUseLevel3: false,
         lowDataModeUseQuad9: false,
-        lowDataModeUseLocalNetworkDNS: false
+        lowDataModeUseLocalNetworkDNS: false,
+        vpnICMPOverheadPaddingMs: 15
     )
 
     enum CodingKeys: String, CodingKey {
@@ -141,6 +144,7 @@ struct AppConfig: Codable, Equatable {
         case lowDataModeUseLevel3
         case lowDataModeUseQuad9
         case lowDataModeUseLocalNetworkDNS
+        case vpnICMPOverheadPaddingMs
     }
 
     init(
@@ -168,7 +172,8 @@ struct AppConfig: Codable, Equatable {
         lowDataModeUseOpenDNS: Bool,
         lowDataModeUseLevel3: Bool,
         lowDataModeUseQuad9: Bool,
-        lowDataModeUseLocalNetworkDNS: Bool
+        lowDataModeUseLocalNetworkDNS: Bool,
+        vpnICMPOverheadPaddingMs: Double
     ) {
         self.pingIntervalMs = pingIntervalMs
         self.dnsIntervalMs = dnsIntervalMs
@@ -195,6 +200,7 @@ struct AppConfig: Codable, Equatable {
         self.lowDataModeUseLevel3 = lowDataModeUseLevel3
         self.lowDataModeUseQuad9 = lowDataModeUseQuad9
         self.lowDataModeUseLocalNetworkDNS = lowDataModeUseLocalNetworkDNS
+        self.vpnICMPOverheadPaddingMs = vpnICMPOverheadPaddingMs
     }
 
     init(from decoder: Decoder) throws {
@@ -271,6 +277,8 @@ struct AppConfig: Codable, Equatable {
         lowDataModeUseQuad9 = try c.decodeIfPresent(Bool.self, forKey: .lowDataModeUseQuad9) ?? Self.defaults.lowDataModeUseQuad9
         lowDataModeUseLocalNetworkDNS =
             try c.decodeIfPresent(Bool.self, forKey: .lowDataModeUseLocalNetworkDNS) ?? Self.defaults.lowDataModeUseLocalNetworkDNS
+        vpnICMPOverheadPaddingMs =
+            try c.decodeIfPresent(Double.self, forKey: .vpnICMPOverheadPaddingMs) ?? Self.defaults.vpnICMPOverheadPaddingMs
     }
 
     func encode(to encoder: Encoder) throws {
@@ -300,6 +308,7 @@ struct AppConfig: Codable, Equatable {
         try c.encode(lowDataModeUseLevel3, forKey: .lowDataModeUseLevel3)
         try c.encode(lowDataModeUseQuad9, forKey: .lowDataModeUseQuad9)
         try c.encode(lowDataModeUseLocalNetworkDNS, forKey: .lowDataModeUseLocalNetworkDNS)
+        try c.encode(vpnICMPOverheadPaddingMs, forKey: .vpnICMPOverheadPaddingMs)
     }
 }
 
@@ -334,7 +343,7 @@ extension AppConfig {
         case .openDNS: return lowDataModeUseOpenDNS
         case .level3: return lowDataModeUseLevel3
         case .quad9: return lowDataModeUseQuad9
-        case .gateway, .custom:
+        case .gateway, .vpnTunnel, .custom:
             return false
         }
     }

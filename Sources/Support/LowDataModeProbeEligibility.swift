@@ -24,4 +24,14 @@ enum LowDataModeProbeEligibility {
     static func customDNSProbingActive(lowDataModePathActive: Bool, target: CustomPingTarget) -> Bool {
         target.dnsProbesEnabled && (!lowDataModePathActive || target.useInLowDataMode)
     }
+
+    /// Same as gateway: no ICMP through the tunnel in Low Data Mode.
+    static func vpnTunnelICMPProbingActive(lowDataModePathActive: Bool) -> Bool {
+        !lowDataModePathActive
+    }
+
+    /// VPN-pushed resolvers: same toggle as system DNS on the physical row (“Use system DNS in Low Data Mode”).
+    static func vpnTunnelDNSProbingActive(lowDataModePathActive: Bool, config: AppConfig) -> Bool {
+        !lowDataModePathActive || config.lowDataModeUseLocalNetworkDNS
+    }
 }

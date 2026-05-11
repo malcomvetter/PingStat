@@ -8,8 +8,12 @@ final class NetworkContextService: ObservableObject {
 
     private var monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "org.malcomvetter.PingStat.path")
+    /// ``NWPathMonitor`` does not always fire when only the IPv4 routing table or VPN tunnel changes; poll lightly to pick up VPN connect/disconnect after launch.
+    private var routePollTimer: Timer?
     private let logger: LoggingService
     private let debugEnabledProvider: () -> Bool
+
+    private static let vpnRoutePollIntervalSeconds: TimeInterval = 5
 
     init(
         logger: LoggingService,
@@ -22,6 +26,7 @@ final class NetworkContextService: ObservableObject {
     func start() {
         attachPathHandler(to: monitor)
         monitor.start(queue: monitorQueue)
+        startRoutePollTimer()
         Task { @MainActor in
             await refreshContext(pathStatus: monitor.currentPath.status, path: monitor.currentPath)
         }
@@ -36,18 +41,40 @@ final class NetworkContextService: ObservableObject {
         monitor = next
         attachPathHandler(to: next)
         next.start(queue: monitorQueue)
+        startRoutePollTimer()
         Task { @MainActor in
             await refreshContext(pathStatus: next.currentPath.status, path: next.currentPath)
         }
     }
 
     func stop() {
+        stopRoutePollTimer()
         monitor.pathUpdateHandler = nil
         monitor.cancel()
     }
 
     deinit {
+        routePollTimer?.invalidate()
         monitor.cancel()
+    }
+
+    private func startRoutePollTimer() {
+        stopRoutePollTimer()
+        let interval = Self.vpnRoutePollIntervalSeconds
+        routePollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.refreshContext()
+            }
+        }
+        if let routePollTimer {
+            RunLoop.main.add(routePollTimer, forMode: .common)
+        }
+    }
+
+    private func stopRoutePollTimer() {
+        routePollTimer?.invalidate()
+        routePollTimer = nil
     }
 
     private func attachPathHandler(to pathMonitor: NWPathMonitor) {
@@ -91,26 +118,108 @@ final class NetworkContextService: ObservableObject {
         }
 
         let localIP = localIPForInterface(interfaceName)
-        let dnsServers = resolveDNSServers(interfaceBSDName: interfaceName)
+        let dnsServersPhysical = dnsServersForPhysicalInterface(bsdName: interfaceName)
 
-        context = NetworkContext(
+        let defRoute = NativeNetworkConfiguration.ipv4DefaultRouteInterfaceAndGateway()
+        let defRouteGw = defRoute.gatewayIPv4
+            ?? defRoute.interfaceName.flatMap { NativeNetworkConfiguration.primaryIPv4Address(onBSDInterface: $0) }
+        var vpnEval = VPNPathEvaluator.evaluate(
+            primaryInterface: interfaceName,
+            primaryRouterIPv4: gateway,
+            defaultRouteInterface: defRoute.interfaceName,
+            defaultRouteGatewayIPv4: defRouteGw
+        )
+
+        if !vpnEval.active, connected,
+           let prim = interfaceName?.trimmingCharacters(in: .whitespacesAndNewlines), !prim.isEmpty,
+           !NativeNetworkConfiguration.isLikelyVpnTunnelInterfaceName(prim),
+           let tunnel = nwTunnelInterfaceFallback(primaryBSDInterface: prim, path: path) {
+            let tunnelGw = NativeNetworkConfiguration.primaryIPv4Address(onBSDInterface: tunnel)
+            vpnEval = VPNPathEvaluator.Result(
+                active: true,
+                vpnInterfaceName: tunnel,
+                tunnelGatewayIPv4: tunnelGw
+            )
+        }
+        let dnsVPN: [String] = {
+            guard vpnEval.active, let vi = vpnEval.vpnInterfaceName, !vi.isEmpty else { return [] }
+            let per = SystemDNSConfiguration.nameserversForBSDInterface(vi)
+            if !per.isEmpty { return per }
+            return []
+        }()
+
+        let vpnTunnelGwStored: String? = {
+            guard let raw = vpnEval.tunnelGatewayIPv4?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !raw.isEmpty else {
+                guard let vi = vpnEval.vpnInterfaceName, !vi.isEmpty else { return nil }
+                return NativeNetworkConfiguration.primaryIPv4Address(onBSDInterface: vi)
+            }
+            return raw
+        }()
+
+        // Name must follow the **route-detected** tunnel (`vpnInterfaceName`). Unscoped Network Extension
+        // APIs (e.g. `NEVPNManager.shared`) can report a different “VPN” (SSL/TLS zero-trust) that does not
+        // carry the default route, so we only use those when we have no BSD tunnel name from routing.
+        let vpnNetworkServiceName: String?
+        if vpnEval.active,
+           let vi = vpnEval.vpnInterfaceName?.trimmingCharacters(in: .whitespacesAndNewlines), !vi.isEmpty {
+            let sc = (NativeNetworkConfiguration.networkServiceDisplayName(forBSDInterface: vi) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            vpnNetworkServiceName = sc.isEmpty ? nil : sc
+        } else if vpnEval.active {
+            let ne = await VpnNetworkExtensionDisplayName.preferredActiveTitle()
+            let nt = (ne ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            vpnNetworkServiceName = nt.isEmpty ? nil : nt
+        } else {
+            vpnNetworkServiceName = nil
+        }
+
+        let next = NetworkContext(
             connected: connected,
             interfaceName: interfaceName,
             interfaceType: interfaceType,
             localIP: localIP,
             gatewayIP: gateway,
-            dnsServers: dnsServers
+            dnsServers: dnsServersPhysical,
+            vpnPathActive: vpnEval.active,
+            vpnDefaultInterfaceName: vpnEval.vpnInterfaceName,
+            vpnTunnelGatewayIPv4: vpnTunnelGwStored,
+            dnsServersVPN: dnsVPN,
+            vpnNetworkServiceName: vpnNetworkServiceName
         )
-
-        logger.debug(
-            .networkContext,
-            "Context refreshed connected=\(connected) interface=\(interfaceName ?? "-") ip=\(localIP ?? "-") gateway=\(gateway ?? "-") dns=\(dnsServers.joined(separator: ","))",
-            enabled: debugEnabledProvider()
-        )
+        if next != context {
+            context = next
+            logger.debug(
+                .networkContext,
+                "Context refreshed connected=\(connected) interface=\(interfaceName ?? "-") ip=\(localIP ?? "-") gateway=\(gateway ?? "-") dns=\(dnsServersPhysical.joined(separator: ",")) vpn=\(vpnEval.active) vpnIf=\(vpnEval.vpnInterfaceName ?? "-") vpnGw=\(vpnTunnelGwStored ?? "-") vpnDns=\(dnsVPN.joined(separator: ",")) vpnName=\(vpnNetworkServiceName ?? "-")",
+                enabled: debugEnabledProvider()
+            )
+        }
     }
 
     private func sysctlDefaultRouteInterfaceName() -> String? {
         NativeNetworkConfiguration.defaultRouteInterfaceNameFromSysctl()
+    }
+
+    /// When sysctl route rows omit ``RTAX_IFP`` (common on macOS), ``NWPath`` can still list a ``utun`` with an IPv4.
+    /// Prefer a tunnel that also has a wide-Internet route in the IPv4 table; otherwise use any distinct tunnel with an address (WireGuard / NEVPN).
+    private func nwTunnelInterfaceFallback(primaryBSDInterface: String, path: NWPath) -> String? {
+        let sorted = path.availableInterfaces
+            .map(\.name)
+            .filter { NativeNetworkConfiguration.isLikelyVpnTunnelInterfaceName($0) }
+            .sorted()
+        for n in sorted where n != primaryBSDInterface {
+            guard NativeNetworkConfiguration.primaryIPv4Address(onBSDInterface: n) != nil else { continue }
+            if NativeNetworkConfiguration.hasWideInternetIPv4Route(onBSDInterface: n) {
+                return n
+            }
+        }
+        for n in sorted where n != primaryBSDInterface {
+            if NativeNetworkConfiguration.primaryIPv4Address(onBSDInterface: n) != nil {
+                return n
+            }
+        }
+        return nil
     }
 
     private func matchingNWInterface(name: String?, path: NWPath) -> NWInterface? {
@@ -164,6 +273,17 @@ final class NetworkContextService: ObservableObject {
         let pattern = #"^(\d{1,3}\.){3}\d{1,3}$"#
         guard trimmed.range(of: pattern, options: .regularExpression) != nil else { return nil }
         return trimmed
+    }
+
+    /// DNS for the **physical** primary interface: per-service `State:/Network/Service/*/DNS` matching that
+    /// interface, then the same manual fallback as ``resolveDNSServers``.
+    private func dnsServersForPhysicalInterface(bsdName: String?) -> [String] {
+        guard let bsd = bsdName, !bsd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return resolveDNSServers(interfaceBSDName: nil)
+        }
+        let per = SystemDNSConfiguration.nameserversForBSDInterface(bsd)
+        if !per.isEmpty { return per }
+        return resolveDNSServers(interfaceBSDName: bsd)
     }
 
     /// Resolver IPs from **SystemConfiguration** (`SCDynamicStore`, same source as `scutil --dns`), then
@@ -288,51 +408,7 @@ final class NetworkContextService: ObservableObject {
 
     private func localIPForInterface(_ interface: String?) -> String? {
         guard let interface else { return nil }
-        return Self.ipv4FromGetifaddrs(interfaceName: interface)
-    }
-
-    /// Enumerates kernel interface addresses (parity with `ipconfig getifaddr` plus relay / privacy cases).
-    private static func ipv4FromGetifaddrs(interfaceName: String) -> String? {
-        var head: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&head) == 0, let first = head else { return nil }
-        defer { freeifaddrs(first) }
-
-        var candidates: [String] = []
-        var ptr: UnsafeMutablePointer<ifaddrs>? = first
-        while let node = ptr {
-            defer { ptr = node.pointee.ifa_next }
-
-            guard let addr = node.pointee.ifa_addr else { continue }
-            guard addr.pointee.sa_family == UInt8(AF_INET) else { continue }
-
-            let name = String(cString: node.pointee.ifa_name)
-            guard name == interfaceName else { continue }
-
-            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            let rc = getnameinfo(
-                addr,
-                socklen_t(addr.pointee.sa_len),
-                &host,
-                socklen_t(host.count),
-                nil,
-                0,
-                NI_NUMERICHOST
-            )
-            guard rc == 0 else { continue }
-
-            let ip = String(cString: host).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !ip.isEmpty, !ip.hasPrefix("127.") else { continue }
-            candidates.append(ip)
-        }
-
-        guard !candidates.isEmpty else { return nil }
-        let unique = Array(Set(candidates))
-        return unique.sorted { lhs, rhs in
-            let lLink = lhs.hasPrefix("169.254.")
-            let rLink = rhs.hasPrefix("169.254.")
-            if lLink != rLink { return !lLink }
-            return lhs < rhs
-        }.first
+        return NativeNetworkConfiguration.primaryIPv4Address(onBSDInterface: interface)
     }
 
     private func inferInterfaceType(_ name: String?) -> String? {

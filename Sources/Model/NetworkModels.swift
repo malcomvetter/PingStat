@@ -17,6 +17,8 @@ enum NetworkHealthState: String, Codable, CaseIterable {
 
 enum EndpointKind: String, Codable {
     case gateway
+    /// IPv4 default-route path (tunnel / VPN); ICMP to tunnel next hop, DNS to VPN-scoped resolvers.
+    case vpnTunnel
     case cloudflare
     case google
     case openDNS
@@ -223,7 +225,18 @@ struct NetworkContext: Codable, Equatable {
     var interfaceType: String?
     var localIP: String?
     var gatewayIP: String?
+    /// Resolvers for the **physical** primary interface (DHCP / manual on that link).
     var dnsServers: [String]
+    /// True when the IPv4 default route uses a tunnel or differs from the primary link’s gateway.
+    var vpnPathActive: Bool
+    /// BSD interface name on the default IPv4 route (e.g. `utun3`).
+    var vpnDefaultInterfaceName: String?
+    /// Next-hop IPv4 on the default route through the tunnel, when known.
+    var vpnTunnelGatewayIPv4: String?
+    /// Resolvers from network services bound to ``vpnDefaultInterfaceName``.
+    var dnsServersVPN: [String]
+    /// VPN row title: **Network** service name for ``vpnDefaultInterfaceName`` (the route-carrying tunnel). Network Extension titles are used only when no BSD tunnel name is known—unscoped NE APIs can name a different active profile (e.g. SSL/TLS zero-trust) that does not own the default route.
+    var vpnNetworkServiceName: String?
 
     static let empty = NetworkContext(
         connected: false,
@@ -231,8 +244,83 @@ struct NetworkContext: Codable, Equatable {
         interfaceType: nil,
         localIP: nil,
         gatewayIP: nil,
-        dnsServers: []
+        dnsServers: [],
+        vpnPathActive: false,
+        vpnDefaultInterfaceName: nil,
+        vpnTunnelGatewayIPv4: nil,
+        dnsServersVPN: [],
+        vpnNetworkServiceName: nil
     )
+
+    enum CodingKeys: String, CodingKey {
+        case connected
+        case interfaceName
+        case interfaceType
+        case localIP
+        case gatewayIP
+        case dnsServers
+        case vpnPathActive
+        case vpnDefaultInterfaceName
+        case vpnTunnelGatewayIPv4
+        case dnsServersVPN
+        case vpnNetworkServiceName
+    }
+
+    init(
+        connected: Bool,
+        interfaceName: String?,
+        interfaceType: String?,
+        localIP: String?,
+        gatewayIP: String?,
+        dnsServers: [String],
+        vpnPathActive: Bool,
+        vpnDefaultInterfaceName: String?,
+        vpnTunnelGatewayIPv4: String?,
+        dnsServersVPN: [String],
+        vpnNetworkServiceName: String? = nil
+    ) {
+        self.connected = connected
+        self.interfaceName = interfaceName
+        self.interfaceType = interfaceType
+        self.localIP = localIP
+        self.gatewayIP = gatewayIP
+        self.dnsServers = dnsServers
+        self.vpnPathActive = vpnPathActive
+        self.vpnDefaultInterfaceName = vpnDefaultInterfaceName
+        self.vpnTunnelGatewayIPv4 = vpnTunnelGatewayIPv4
+        self.dnsServersVPN = dnsServersVPN
+        self.vpnNetworkServiceName = vpnNetworkServiceName
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        connected = try c.decodeIfPresent(Bool.self, forKey: .connected) ?? false
+        interfaceName = try c.decodeIfPresent(String.self, forKey: .interfaceName)
+        interfaceType = try c.decodeIfPresent(String.self, forKey: .interfaceType)
+        localIP = try c.decodeIfPresent(String.self, forKey: .localIP)
+        gatewayIP = try c.decodeIfPresent(String.self, forKey: .gatewayIP)
+        dnsServers = try c.decodeIfPresent([String].self, forKey: .dnsServers) ?? []
+        vpnPathActive = try c.decodeIfPresent(Bool.self, forKey: .vpnPathActive) ?? false
+        vpnDefaultInterfaceName = try c.decodeIfPresent(String.self, forKey: .vpnDefaultInterfaceName)
+        vpnTunnelGatewayIPv4 = try c.decodeIfPresent(String.self, forKey: .vpnTunnelGatewayIPv4)
+        dnsServersVPN = try c.decodeIfPresent([String].self, forKey: .dnsServersVPN) ?? []
+        vpnNetworkServiceName = try c.decodeIfPresent(String.self, forKey: .vpnNetworkServiceName)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(connected, forKey: .connected)
+        try c.encodeIfPresent(interfaceName, forKey: .interfaceName)
+        try c.encodeIfPresent(interfaceType, forKey: .interfaceType)
+        try c.encodeIfPresent(localIP, forKey: .localIP)
+        try c.encodeIfPresent(gatewayIP, forKey: .gatewayIP)
+        try c.encode(dnsServers, forKey: .dnsServers)
+        try c.encode(vpnPathActive, forKey: .vpnPathActive)
+        try c.encodeIfPresent(vpnDefaultInterfaceName, forKey: .vpnDefaultInterfaceName)
+        try c.encodeIfPresent(vpnTunnelGatewayIPv4, forKey: .vpnTunnelGatewayIPv4)
+        try c.encode(dnsServersVPN, forKey: .dnsServersVPN)
+        try c.encodeIfPresent(vpnNetworkServiceName, forKey: .vpnNetworkServiceName)
+    }
 }
 
 struct HealthSnapshot: Codable, Equatable {

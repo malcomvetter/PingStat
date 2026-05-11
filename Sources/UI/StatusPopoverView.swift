@@ -166,6 +166,15 @@ struct StatusPopoverView: View {
     private var summaryListRows: some View {
         VStack(alignment: .leading, spacing: 8) {
             consolidatedLocalNetworkRow
+            if let vpn = vpnEndpoint {
+                Button {
+                    selectedEndpointID = vpn.id
+                } label: {
+                    consolidatedVpnRow(vpn)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+            }
             ForEach(wanEndpointsForSummary) { endpoint in
                 Button {
                     selectedEndpointID = endpoint.id
@@ -216,6 +225,7 @@ struct StatusPopoverView: View {
     private var summaryDnsGreenCount: Int {
         var n = 0
         if summaryPrimaryDnsIsGreen { n += 1 }
+        if summaryVpnPrimaryDnsIsGreen { n += 1 }
         for ep in wanEndpointsForSummary
             where ep.dnsProbingActive && viewModel.dnsStatus.fallbackAnsweredByServer[ep.host] == true {
             n += 1
@@ -230,6 +240,7 @@ struct StatusPopoverView: View {
     private var summaryDnsTotalCount: Int {
         var n = 0
         if gatewayEndpoint?.dnsProbingActive == true { n += 1 }
+        if vpnEndpoint?.dnsProbingActive == true { n += 1 }
         n += wanEndpointsForSummary.filter(\.dnsProbingActive).count
         n += customEndpointsForSummary.filter { summaryCustomRowShowsDNS($0) && $0.dnsProbingActive }.count
         return n
@@ -238,6 +249,9 @@ struct StatusPopoverView: View {
     private var summaryMeanPingAcrossActiveMs: Double? {
         var values: [Double] = []
         if let gw = gatewayEndpoint, gw.icmpProbingActive, gw.latest?.success == true, let m = gw.meanLast5Ms {
+            values.append(m)
+        }
+        if let vpn = vpnEndpoint, vpn.icmpProbingActive, vpn.latest?.success == true, let m = vpn.meanLast5Ms {
             values.append(m)
         }
         for ep in wanEndpointsForSummary {
@@ -285,6 +299,18 @@ struct StatusPopoverView: View {
 
     private var gatewayEndpoint: EndpointStatus? {
         viewModel.endpoints.first(where: { $0.kind == .gateway })
+    }
+
+    private var vpnEndpoint: EndpointStatus? {
+        viewModel.endpoints.first(where: { $0.kind == .vpnTunnel })
+    }
+
+    private var summaryVpnPrimaryDnsIsGreen: Bool {
+        guard let vpn = vpnEndpoint, vpn.dnsProbingActive else { return false }
+        let dns = viewModel.dnsStatusVPN
+        guard dns.lastCheck != nil else { return false }
+        guard let resolver = viewModel.context.dnsServersVPN.first, !resolver.isEmpty else { return false }
+        return !dns.timedOutServers.contains(resolver)
     }
 
     private var gatewayEndpointID: String? {
@@ -387,6 +413,26 @@ struct StatusPopoverView: View {
         )
     }
 
+    private func consolidatedVpnRow(_ endpoint: EndpointStatus) -> some View {
+        let pingVisual = summaryPingVisual(for: endpoint)
+        return consolidatedRow(
+            leading: { SummaryRowLeading.vpn },
+            title: endpoint.label,
+            subtitle: endpoint.host,
+            pingIcon: pingVisual.icon,
+            pingTint: pingVisual.color,
+            pingMsText: summaryPingMsText(for: endpoint),
+            dnsSymbol: vpnPrimaryDNSSymbol(endpoint: endpoint),
+            dnsTint: vpnPrimaryDNSTint(endpoint: endpoint),
+            showChevron: true,
+            dnsSymbolFont: .title3.weight(.medium),
+            dnsColumnActive: endpoint.dnsProbingActive,
+            pingColumnActive: endpoint.icmpProbingActive
+                || (viewModel.lowDataModePathActive && endpoint.dnsProbingActive),
+            showLowDataModePausedIndicator: endpointFullyLDMPaused(endpoint)
+        )
+    }
+
     private func consolidatedCustomRow(_ endpoint: EndpointStatus) -> some View {
         let dnsOn = viewModel.settingsStore.config.customTarget?.dnsProbesEnabled == true
         let pingVisual = summaryPingVisual(for: endpoint)
@@ -420,6 +466,7 @@ struct StatusPopoverView: View {
         showChevron: Bool,
         dnsLabel: String = "DNS",
         showDNSColumn: Bool = true,
+        dnsSymbolFont: Font = .body.weight(.medium),
         dnsColumnActive: Bool = true,
         pingColumnActive: Bool = true,
         showLowDataModePausedIndicator: Bool = false
@@ -450,7 +497,7 @@ struct StatusPopoverView: View {
                             Group {
                                 Image(systemName: dnsSymbol)
                                     .foregroundColor(dnsTint)
-                                    .font(.body.weight(.medium))
+                                    .font(dnsSymbolFont)
                                 Text(dnsLabel)
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
@@ -494,7 +541,7 @@ struct StatusPopoverView: View {
     private func summaryPingVisual(for endpoint: EndpointStatus) -> (icon: String, color: Color) {
         guard endpoint.icmpProbingActive else {
             if viewModel.lowDataModePathActive,
-               endpoint.kind == .gateway,
+               (endpoint.kind == .gateway || endpoint.kind == .vpnTunnel),
                endpoint.dnsProbingActive {
                 return ("network.slash", Color.secondary)
             }
@@ -515,7 +562,33 @@ struct StatusPopoverView: View {
         return dns.timedOutServers.contains(resolver) ? "xmark.circle.fill" : "checkmark.circle.fill"
     }
 
-    /// Primary DNS column: teal when resolver answered and gateway ICMP mean matches blazing threshold (same rule as ``HealthEvaluator`` WAN blazing contributor).
+    private func vpnPrimaryDNSSymbol(endpoint: EndpointStatus) -> String {
+        if !endpoint.dnsProbingActive {
+            return "minus.circle.fill"
+        }
+        let dns = viewModel.dnsStatusVPN
+        guard dns.lastCheck != nil else { return "ellipsis.circle.fill" }
+        guard let resolver = viewModel.context.dnsServersVPN.first, !resolver.isEmpty else {
+            return "ellipsis.circle.fill"
+        }
+        return dns.timedOutServers.contains(resolver) ? "xmark.circle.fill" : "checkmark.circle.fill"
+    }
+
+    private func vpnPrimaryDNSTint(endpoint: EndpointStatus) -> Color {
+        if !endpoint.dnsProbingActive { return .secondary }
+        let dns = viewModel.dnsStatusVPN
+        guard dns.lastCheck != nil else { return .secondary }
+        guard let resolver = viewModel.context.dnsServersVPN.first, !resolver.isEmpty else { return .secondary }
+        if dns.timedOutServers.contains(resolver) {
+            return .red
+        }
+        if endpoint.icmpProbingActive, pingMeanQualifiesBlazing(endpoint) {
+            return HealthAppearance.blazingAccentColor()
+        }
+        return HealthAppearance.successGreen(for: colorScheme)
+    }
+
+    /// Primary DNS column on the local row: teal when the resolver answered and gateway ICMP mean matches the blazing threshold (same rule as ``HealthEvaluator`` WAN blazing contributor).
     private func primaryDNSTint(gatewayForTeal: EndpointStatus?) -> Color {
         if let gatewayForTeal, !gatewayForTeal.dnsProbingActive {
             return .secondary
@@ -580,7 +653,15 @@ struct StatusPopoverView: View {
     /// Same inequality as ``HealthEvaluator.isBlazing(wanMeansMs:config:)`` per row: mean(5) strictly below blazing threshold.
     private func pingMeanQualifiesBlazing(_ endpoint: EndpointStatus) -> Bool {
         guard endpoint.latest?.success == true, let mean = endpoint.meanLast5Ms else { return false }
-        return mean < viewModel.settingsStore.config.blazingThresholdMs
+        let adjusted = icmpMeanForThresholds(endpoint, rawMean: mean)
+        return adjusted < viewModel.settingsStore.config.blazingThresholdMs
+    }
+
+    private func icmpMeanForThresholds(_ endpoint: EndpointStatus, rawMean: Double) -> Double {
+        if endpoint.kind == .vpnTunnel {
+            return rawMean + viewModel.settingsStore.config.vpnICMPOverheadPaddingMs
+        }
+        return rawMean
     }
 
     private var dnsFootnoteLines: [String] {
@@ -645,6 +726,13 @@ struct StatusPopoverView: View {
                 Group {
                     if endpoint.kind == .gateway {
                         Text("Local Network")
+                            .font(.headline)
+                        Text("\(endpoint.host) • mean(5): \(viewModel.meanText(for: endpoint))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 2)
+                    } else if endpoint.kind == .vpnTunnel {
+                        Text(endpoint.label)
                             .font(.headline)
                         Text("\(endpoint.host) • mean(5): \(viewModel.meanText(for: endpoint))")
                             .font(.caption)
@@ -725,7 +813,7 @@ struct StatusPopoverView: View {
                 return HealthAppearance.blazingAccentColor()
             }
             let threshold = viewModel.settingsStore.config.healthyThresholdMs
-            if let mean = endpoint.meanLast5Ms, mean > threshold {
+            if let mean = endpoint.meanLast5Ms, icmpMeanForThresholds(endpoint, rawMean: mean) > threshold {
                 return .orange
             }
             return HealthAppearance.successGreen(for: colorScheme)
@@ -753,7 +841,7 @@ struct StatusPopoverView: View {
             c.pingLevel3Enabled = false
         case .quad9:
             c.pingQuad9Enabled = false
-        case .gateway, .custom:
+        case .gateway, .vpnTunnel, .custom:
             return
         }
         viewModel.settingsStore.config = c
@@ -766,7 +854,7 @@ struct StatusPopoverView: View {
         case .openDNS: return "opendns"
         case .level3: return "level3"
         case .quad9: return "quad9"
-        case .gateway, .custom: return nil
+        case .gateway, .vpnTunnel, .custom: return nil
         }
     }
 
@@ -916,6 +1004,14 @@ private enum SummaryRowLeading {
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(.secondary)
             .accessibilityLabel("Custom target")
+    }
+
+    static var vpn: some View {
+        Image(systemName: "lock.fill")
+            .font(.title2)
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("VPN")
     }
 }
 

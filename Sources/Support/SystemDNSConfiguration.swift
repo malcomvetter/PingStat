@@ -8,6 +8,40 @@ enum SystemDNSConfiguration {
 
     /// Ordered unique nameserver IPs (IPv4 / IPv6). Link-local IPv6 without a zone gets `%PrimaryInterface`
     /// from `State:/Network/Global/IPv4` or the per-service `Interface` when available.
+    /// Nameserver IPs from `State:/Network/Service/*/DNS` whose sibling **IPv4** `Interface` matches `bsdInterface`
+    /// (e.g. `en0` for LAN DHCP, `utun3` for VPN-pushed resolvers). Order follows sorted DNS keys.
+    static func nameserversForBSDInterface(_ bsdInterface: String) -> [String] {
+        let bsd = bsdInterface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !bsd.isEmpty else { return [] }
+        guard let store = SCDynamicStoreCreate(nil, "PingStat.DNSPerIf" as CFString, nil, nil) else {
+            return []
+        }
+        var ordered: [String] = []
+        var seen = Set<String>()
+        let pattern = "^State:/Network/Service/[^/]+/DNS$" as CFString
+        guard let keyList = SCDynamicStoreCopyKeyList(store, pattern) as? [String] else {
+            return []
+        }
+        for key in keyList.sorted() {
+            guard let serviceID = serviceID(fromDNSKey: key) else { continue }
+            let ipv4Path = "State:/Network/Service/\(serviceID)/IPv4"
+            guard let ipv4 = copyDictionary(store, ipv4Path) else { continue }
+            let serviceIf = interfaceName(fromIPv4: ipv4)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard serviceIf == bsd else { continue }
+            guard let dnsDict = copyDictionary(store, key),
+                  let addrs = serverAddresses(from: dnsDict) else { continue }
+            for s in addrs {
+                let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard isIPLiteral(trimmed) else { continue }
+                let zoned = zoneLinkLocalIfNeeded(trimmed, bsdIf: bsd)
+                guard !seen.contains(zoned) else { continue }
+                ordered.append(zoned)
+                seen.insert(zoned)
+            }
+        }
+        return preferNonLoopback(ordered)
+    }
+
     static func orderedNameserverAddresses(interfaceHint: String?) -> [String] {
         guard let store = SCDynamicStoreCreate(nil, "PingStat.DNS" as CFString, nil, nil) else {
             return []

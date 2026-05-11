@@ -78,7 +78,11 @@ final class PingStatTests: XCTestCase {
                 interfaceType: nil,
                 localIP: nil,
                 gatewayIP: nil,
-                dnsServers: []
+                dnsServers: [],
+                vpnPathActive: false,
+                vpnDefaultInterfaceName: nil,
+                vpnTunnelGatewayIPv4: nil,
+                dnsServersVPN: []
             ),
             endpointStatuses: [:],
             dnsStatus: DNSCheckStatus(),
@@ -156,7 +160,11 @@ final class PingStatTests: XCTestCase {
                 interfaceType: "Ethernet/Wi-Fi",
                 localIP: "192.168.1.25",
                 gatewayIP: "192.168.1.1",
-                dnsServers: ["9.9.9.9"]
+                dnsServers: ["9.9.9.9"],
+                vpnPathActive: false,
+                vpnDefaultInterfaceName: nil,
+                vpnTunnelGatewayIPv4: nil,
+                dnsServersVPN: []
             ),
             endpointStatuses: [
                 .gateway: gateway,
@@ -247,7 +255,11 @@ final class PingStatTests: XCTestCase {
                 interfaceType: "Ethernet/Wi-Fi",
                 localIP: "192.168.1.25",
                 gatewayIP: "192.168.1.1",
-                dnsServers: ["192.168.1.1"]
+                dnsServers: ["192.168.1.1"],
+                vpnPathActive: false,
+                vpnDefaultInterfaceName: nil,
+                vpnTunnelGatewayIPv4: nil,
+                dnsServersVPN: []
             ),
             endpointStatuses: [
                 .gateway: gateway,
@@ -318,7 +330,11 @@ final class PingStatTests: XCTestCase {
                 interfaceType: "Wi-Fi",
                 localIP: "10.0.0.2",
                 gatewayIP: "10.0.0.1",
-                dnsServers: ["1.1.1.1"]
+                dnsServers: ["1.1.1.1"],
+                vpnPathActive: false,
+                vpnDefaultInterfaceName: nil,
+                vpnTunnelGatewayIPv4: nil,
+                dnsServersVPN: []
             ),
             endpointStatuses: [.cloudflare: cloudflare],
             dnsStatus: DNSCheckStatus(lastCheck: now, resolvedIPs: ["17.253.144.10"]),
@@ -355,7 +371,11 @@ final class PingStatTests: XCTestCase {
                 interfaceType: "Wi-Fi",
                 localIP: "10.0.0.2",
                 gatewayIP: "10.0.0.1",
-                dnsServers: ["1.1.1.1"]
+                dnsServers: ["1.1.1.1"],
+                vpnPathActive: false,
+                vpnDefaultInterfaceName: nil,
+                vpnTunnelGatewayIPv4: nil,
+                dnsServersVPN: []
             ),
             endpointStatuses: [.cloudflare: cloudflare],
             dnsStatus: DNSCheckStatus(),
@@ -558,6 +578,99 @@ final class PingStatTests: XCTestCase {
         XCTAssertFalse(
             LowDataModeProbeEligibility.customDNSProbingActive(lowDataModePathActive: true, target: target),
             "No DNS column ⇒ no DNS probes"
+        )
+    }
+
+    func testWideInternetIPv4RouteRecognizesSplitDefaults() {
+        XCTAssertTrue(
+            NativeNetworkConfiguration.isWideInternetIPv4DestinationAndMask(destinationIPv4: "0.0.0.0", netmaskIPv4: nil)
+        )
+        XCTAssertTrue(
+            NativeNetworkConfiguration.isWideInternetIPv4DestinationAndMask(destinationIPv4: "0.0.0.0", netmaskIPv4: "0.0.0.0")
+        )
+        XCTAssertTrue(
+            NativeNetworkConfiguration.isWideInternetIPv4DestinationAndMask(destinationIPv4: "0.0.0.0", netmaskIPv4: "128.0.0.0")
+        )
+        XCTAssertTrue(
+            NativeNetworkConfiguration.isWideInternetIPv4DestinationAndMask(destinationIPv4: "128.0.0.0", netmaskIPv4: "128.0.0.0")
+        )
+        XCTAssertFalse(
+            NativeNetworkConfiguration.isWideInternetIPv4DestinationAndMask(destinationIPv4: "10.0.0.0", netmaskIPv4: "255.0.0.0")
+        )
+        XCTAssertFalse(
+            NativeNetworkConfiguration.isWideInternetIPv4DestinationAndMask(destinationIPv4: "0.0.0.0", netmaskIPv4: "255.0.0.0")
+        )
+    }
+
+    func testVPNPathEvaluatorDetectsUtunDefaultRoute() {
+        let r = VPNPathEvaluator.evaluate(
+            primaryInterface: "en0",
+            primaryRouterIPv4: "192.168.1.1",
+            defaultRouteInterface: "utun4",
+            defaultRouteGatewayIPv4: "10.2.0.1"
+        )
+        XCTAssertTrue(r.active)
+        XCTAssertEqual(r.vpnInterfaceName, "utun4")
+        XCTAssertEqual(r.tunnelGatewayIPv4, "10.2.0.1")
+    }
+
+    func testVPNPathEvaluatorInactiveWhenPrimaryMatchesNonTunnelRoute() {
+        let r = VPNPathEvaluator.evaluate(
+            primaryInterface: "en0",
+            primaryRouterIPv4: "192.168.1.1",
+            defaultRouteInterface: "en0",
+            defaultRouteGatewayIPv4: "192.168.1.1"
+        )
+        XCTAssertFalse(r.active)
+        XCTAssertNil(r.vpnInterfaceName)
+        XCTAssertNil(r.tunnelGatewayIPv4)
+    }
+
+    func testVPNPathEvaluatorDetectsPrimaryVsDefaultInterfaceMismatch() {
+        let r = VPNPathEvaluator.evaluate(
+            primaryInterface: "en0",
+            primaryRouterIPv4: "192.168.1.1",
+            defaultRouteInterface: "en9",
+            defaultRouteGatewayIPv4: "192.168.1.1"
+        )
+        XCTAssertTrue(r.active)
+        XCTAssertEqual(r.vpnInterfaceName, "en9")
+    }
+
+    func testVPNPathEvaluatorDetectsGatewayMismatchWhenInterfacesDiffer() {
+        let r = VPNPathEvaluator.evaluate(
+            primaryInterface: "en0",
+            primaryRouterIPv4: "192.168.1.1",
+            defaultRouteInterface: "en9",
+            defaultRouteGatewayIPv4: "10.0.0.1"
+        )
+        XCTAssertTrue(r.active)
+    }
+
+    func testVPNPathEvaluatorNoDefaultInterfaceMeansInactive() {
+        let r = VPNPathEvaluator.evaluate(
+            primaryInterface: "en0",
+            primaryRouterIPv4: "192.168.1.1",
+            defaultRouteInterface: nil,
+            defaultRouteGatewayIPv4: "10.0.0.1"
+        )
+        XCTAssertFalse(r.active)
+    }
+
+    func testLowDataModeVpnTunnelICMPOffMatchesGateway() {
+        XCTAssertFalse(LowDataModeProbeEligibility.vpnTunnelICMPProbingActive(lowDataModePathActive: true))
+        XCTAssertTrue(LowDataModeProbeEligibility.vpnTunnelICMPProbingActive(lowDataModePathActive: false))
+    }
+
+    func testLowDataModeVpnTunnelDNSUsesSystemLocalNetworkToggle() {
+        var c = AppConfig.defaults
+        c.lowDataModeUseLocalNetworkDNS = false
+        XCTAssertFalse(
+            LowDataModeProbeEligibility.vpnTunnelDNSProbingActive(lowDataModePathActive: true, config: c)
+        )
+        c.lowDataModeUseLocalNetworkDNS = true
+        XCTAssertTrue(
+            LowDataModeProbeEligibility.vpnTunnelDNSProbingActive(lowDataModePathActive: true, config: c)
         )
     }
 }

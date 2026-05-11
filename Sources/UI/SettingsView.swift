@@ -99,7 +99,7 @@ struct SettingsView: View {
 
                     Section("Local Network") {
                         Text(
-                            "ICMP to the default gateway is never sent while Low Data Mode is active. You can still allow DNS probes against your system-configured resolvers (popover “Local Network” DNS column)."
+                            "While Low Data Mode is active, ICMP to the default gateway and to the VPN tunnel (when that row appears) is not sent. You can still allow DNS probes against system resolvers on your primary interface (popover “Local Network” DNS column) and against VPN-pushed resolvers on the default-route interface (popover “VPN” DNS column) using the toggle below."
                         )
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -217,6 +217,22 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        LabeledContent("VPN Tolerance Addition") {
+                            HStack(spacing: 4) {
+                                TextField(
+                                    "VPN Tolerance Addition",
+                                    value: positiveMillisecondsBinding(\.vpnICMPOverheadPaddingMs, minimum: 0),
+                                    format: .number
+                                )
+                                .labelsHidden()
+                                .frame(width: 80)
+                                Text("ms")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .help(
+                            "Milliseconds added to the VPN tunnel ICMP rolling mean for display and for blazing / healthy coloring on the VPN row (extra tolerance for typical tunnel overhead)."
+                        )
                     }
 
                     Section("Precision") {

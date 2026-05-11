@@ -202,6 +202,15 @@ final class StatusItemController: NSObject {
             addStatusMenuRow(to: menu, title: "Local", detail: local.detail, state: local.state)
         }
 
+        if let vpn = viewModel.endpoints.first(where: { $0.kind == .vpnTunnel }) {
+            if endpointFullyLDMPaused(vpn) {
+                addLowDataModePausedMenuRow(to: menu, label: vpn.label, host: vpn.host)
+            } else {
+                let row = resolverVPNMenuRow(vpn, compact: true)
+                addStatusMenuRow(to: menu, title: vpn.label, detail: row.detail, state: row.state)
+            }
+        }
+
         for kind in [
             EndpointKind.cloudflare,
             EndpointKind.google,
@@ -300,10 +309,30 @@ final class StatusItemController: NSObject {
         return (detail, icmpState)
     }
 
+    private func resolverVPNMenuRow(_ ep: EndpointStatus, compact: Bool = false) -> (detail: String, state: StatusMenuRowState) {
+        let dnsPart = vpnPrimaryDNSCompactLabel(endpoint: ep)
+        let (icmpPart, icmpState) = icmpSegment(for: ep, compact: compact)
+        let detail = "\(ep.host) · \(dnsPart) · \(icmpPart)"
+        return (detail, icmpState)
+    }
+
+    private func vpnPrimaryDNSCompactLabel(endpoint: EndpointStatus) -> String {
+        if !endpoint.dnsProbingActive { return "DNS paused" }
+        let dns = viewModel.dnsStatusVPN
+        guard dns.lastCheck != nil else { return "DNS …" }
+        guard let resolver = viewModel.context.dnsServersVPN.first, !resolver.isEmpty else {
+            return "DNS —"
+        }
+        if dns.timedOutServers.contains(resolver) {
+            return "DNS no answer"
+        }
+        return "DNS OK"
+    }
+
     private func icmpSegment(for ep: EndpointStatus, compact: Bool) -> (String, StatusMenuRowState) {
         guard ep.icmpProbingActive else {
             if viewModel.lowDataModePathActive,
-               ep.kind == .gateway,
+               (ep.kind == .gateway || ep.kind == .vpnTunnel),
                ep.dnsProbingActive {
                 let part = compact ? "(Low Data Mode)" : "ICMP (Low Data Mode)"
                 return (part, .pending)

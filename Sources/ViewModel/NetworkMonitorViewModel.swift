@@ -12,6 +12,8 @@ final class NetworkMonitorViewModel: ObservableObject {
     @Published private(set) var context: NetworkContext = .empty
     @Published private(set) var endpoints: [EndpointStatus] = []
     @Published private(set) var dnsStatus = DNSCheckStatus()
+    /// DNS probe results for **VPN-pushed** resolvers (``NetworkContext.dnsServersVPN``); empty when no VPN path.
+    @Published private(set) var dnsStatusVPN = DNSCheckStatus()
     /// Last DNS probe detail lines keyed by nameserver address (e.g. `8.8.8.8`), max 2 lines per server, for endpoint detail.
     @Published private(set) var dnsProbeHistoryByNameserver: [String: [String]] = [:]
     @Published private(set) var snapshot = HealthSnapshot(
@@ -150,11 +152,25 @@ final class NetworkMonitorViewModel: ObservableObject {
 
     func meanText(for endpoint: EndpointStatus) -> String {
         guard let mean = endpoint.meanLast5Ms else { return "--" }
-        return "\(Int(mean.rounded())) ms"
+        let displayMean: Double
+        if endpoint.kind == .vpnTunnel {
+            displayMean = mean + settingsStore.config.vpnICMPOverheadPaddingMs
+        } else {
+            displayMean = mean
+        }
+        return "\(Int(displayMean.rounded())) ms"
     }
 
     /// DNS UDP probe log lines: WAN/custom use this endpoint’s nameserver only (max 2). Local network lists each resolver IP in order, up to 2 lines per server.
     func dnsProbeLogLines(for endpoint: EndpointStatus) -> [String] {
+        if endpoint.kind == .vpnTunnel {
+            let keys = context.dnsServersVPN.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            var combined: [String] = []
+            for k in keys {
+                combined.append(contentsOf: dnsProbeHistoryByNameserver[k] ?? [])
+            }
+            return combined
+        }
         if endpoint.kind == .gateway {
             var keys: [String] = []
             var seen = Set<String>()
@@ -196,6 +212,7 @@ final class NetworkMonitorViewModel: ObservableObject {
             snapshot: snapshot,
             endpoints: endpoints,
             dnsStatus: dnsStatus,
+            dnsStatusVPN: dnsStatusVPN,
             logs: logs
         )
         return try debugExportService.exportJSON(to: directoryURL, payload: payload)
@@ -206,16 +223,17 @@ final class NetworkMonitorViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] newContext in
                 guard let self else { return }
-                let hadConnectivity = self.context.connected
-                let oldGateway = self.context.gatewayIP
+                let previous = self.context
+                let hadConnectivity = previous.connected
                 self.context = newContext
                 if hadConnectivity, !newContext.connected {
                     self.endpoints = OfflineProbeDisplayPolicy.probeHistoryClearedEndpoints(self.endpoints)
                     self.dnsStatus = DNSCheckStatus()
+                    self.dnsStatusVPN = DNSCheckStatus()
                     self.dnsProbeHistoryByNameserver = [:]
                     self.previousDNSFiltering = false
                 }
-                if oldGateway != newContext.gatewayIP {
+                if previous != newContext {
                     self.rebuildEndpoints()
                 }
                 self.requestHealthEvaluation()
@@ -411,7 +429,7 @@ final class NetworkMonitorViewModel: ObservableObject {
         let cfg = settingsStore.config
         let ldm = lowDataModePathActive
         let skipSystemResolverProbes = ldm && !cfg.lowDataModeUseLocalNetworkDNS
-        let configuredServers: [String] = skipSystemResolverProbes
+        let configuredPhysical: [String] = skipSystemResolverProbes
             ? []
             : context.dnsServers.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         let fallbackServers = cfg.fallbackDNSServersForProbes(lowDataModePathActive: ldm)
@@ -421,36 +439,68 @@ final class NetworkMonitorViewModel: ObservableObject {
             let ip = t.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
             return ip.isEmpty ? [] : [ip]
         }()
-        let hasWork =
-            !configuredServers.isEmpty || !fallbackServers.isEmpty || !customNameservers.isEmpty
-        guard hasWork else {
+        let physicalHasWork =
+            !configuredPhysical.isEmpty || !fallbackServers.isEmpty || !customNameservers.isEmpty
+
+        let configuredVPN: [String] = {
+            guard context.vpnPathActive else { return [] }
+            guard !skipSystemResolverProbes else { return [] }
+            return context.dnsServersVPN.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        }()
+        let vpnHasWork =
+            context.vpnPathActive
+            && (!configuredVPN.isEmpty || !fallbackServers.isEmpty || !customNameservers.isEmpty)
+
+        guard physicalHasWork || vpnHasWork else {
             dnsStatus = DNSCheckStatus()
+            dnsStatusVPN = DNSCheckStatus()
             requestHealthEvaluation()
             return
         }
-        let result = await dnsService.check(
-            probeHostname: cfg.sanitizedDNSProbeHostname,
-            configuredServers: configuredServers,
-            fallbackServers: fallbackServers,
-            customNameservers: customNameservers,
-            timeoutMs: cfg.servicePingTimeoutMs,
-            skipSystemResolverProbes: skipSystemResolverProbes && configuredServers.isEmpty
-        )
-        dnsStatus = result.status
-        recordDNSProbeHistory(result.status)
 
-        let shouldNotifyFiltering =
-            result.status.allConfiguredTimedOut
-            && result.status.fallbackWorked
-            && !result.status.systemResolverProbesSkipped
-        if shouldNotifyFiltering {
-            if !previousDNSFiltering, healthToastsPermitted() {
-                notificationService.notifyDNSFiltering(cooldownSeconds: settingsStore.config.notificationCooldownSeconds)
-                previousDNSFiltering = true
+        if physicalHasWork {
+            let result = await dnsService.check(
+                probeHostname: cfg.sanitizedDNSProbeHostname,
+                configuredServers: configuredPhysical,
+                fallbackServers: fallbackServers,
+                customNameservers: customNameservers,
+                timeoutMs: cfg.servicePingTimeoutMs,
+                skipSystemResolverProbes: skipSystemResolverProbes && configuredPhysical.isEmpty
+            )
+            dnsStatus = result.status
+            recordDNSProbeHistory(result.status)
+
+            let shouldNotifyFiltering =
+                result.status.allConfiguredTimedOut
+                && result.status.fallbackWorked
+                && !result.status.systemResolverProbesSkipped
+            if shouldNotifyFiltering {
+                if !previousDNSFiltering, healthToastsPermitted() {
+                    notificationService.notifyDNSFiltering(cooldownSeconds: settingsStore.config.notificationCooldownSeconds)
+                    previousDNSFiltering = true
+                }
+            } else {
+                previousDNSFiltering = false
             }
         } else {
-            previousDNSFiltering = false
+            dnsStatus = DNSCheckStatus()
         }
+
+        if vpnHasWork {
+            let vpnResult = await dnsService.check(
+                probeHostname: cfg.sanitizedDNSProbeHostname,
+                configuredServers: configuredVPN,
+                fallbackServers: fallbackServers,
+                customNameservers: customNameservers,
+                timeoutMs: cfg.servicePingTimeoutMs,
+                skipSystemResolverProbes: skipSystemResolverProbes && configuredVPN.isEmpty
+            )
+            dnsStatusVPN = vpnResult.status
+            recordDNSProbeHistory(vpnResult.status)
+        } else {
+            dnsStatusVPN = DNSCheckStatus()
+        }
+
         requestHealthEvaluation()
     }
 
@@ -533,6 +583,37 @@ final class NetworkMonitorViewModel: ObservableObject {
                 dnsProbingActive: gatewayDNS
             ))
         }
+
+        if context.vpnPathActive {
+            let tunnelGw = context.vpnTunnelGatewayIPv4?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let vpnDns = context.dnsServersVPN.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            let hasIcmp = tunnelGw.map { !$0.isEmpty } ?? false
+            let hasDns = !vpnDns.isEmpty
+            if hasIcmp || hasDns {
+                let host: String = {
+                    if let g = tunnelGw, !g.isEmpty { return g }
+                    return vpnDns.first ?? "VPN"
+                }()
+                let vpnLabel: String = {
+                    let n = context.vpnNetworkServiceName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return n.isEmpty ? "VPN" : n
+                }()
+                let icmpOn = hasIcmp && LowDataModeProbeEligibility.vpnTunnelICMPProbingActive(lowDataModePathActive: ldm)
+                let dnsOn = hasDns && LowDataModeProbeEligibility.vpnTunnelDNSProbingActive(lowDataModePathActive: ldm, config: cfg)
+                newEndpoints.append(EndpointStatus(
+                    id: "vpn",
+                    label: vpnLabel,
+                    host: host,
+                    kind: .vpnTunnel,
+                    meanLast5Ms: nil,
+                    last10: [],
+                    latest: nil,
+                    icmpProbingActive: icmpOn,
+                    dnsProbingActive: dnsOn
+                ))
+            }
+        }
+
         let wanIdByKind: [EndpointKind: String] = [
             .cloudflare: "cloudflare",
             .google: "google",

@@ -30,7 +30,9 @@
 		AEFD8E1ECADEF2980DD9AD2C /* ICMPPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D5E7E1250837BE6A66018C /* ICMPPing.swift */; };
 		B5B32EE8F5DCACD1BD719048 /* DNSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70073510CB9A14E301BA63F9 /* DNSService.swift */; };
 		CFB8710E19EF01B583B3F8C4 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0444896208B2068A335E7171 /* SettingsStore.swift */; };
+		CFB9615B5E7855B8B1AF1DB2 /* VpnNetworkExtensionDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9EED0A4C89829E8A807561C /* VpnNetworkExtensionDisplayName.swift */; };
 		D1C40ECFBE4D1A2253B0F744 /* PingStatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7FCE5FA1D79892C3442C57 /* PingStatApp.swift */; };
+		DB24068A3A303EAA2D310B8D /* VPNPathEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72A5D7B3A7C6B93517B67217 /* VPNPathEvaluator.swift */; };
 		DC6E9E4D189DEA67BFDEB03F /* SystemDNSConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B605F9D5B139919A4DA1D4 /* SystemDNSConfiguration.swift */; };
 		E430ABC98D168E41C260C420 /* NetworkModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E778EBA074954763C4D61921 /* NetworkModels.swift */; };
 		EDF3F7D65718B527A0EE26E2 /* PingStatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42C38ED7D8811349CD8EB38D /* PingStatTests.swift */; };
@@ -67,12 +69,14 @@
 		54DBDF9997E7AAA5B73DFFC1 /* LowDataModeProbeEligibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LowDataModeProbeEligibility.swift; sourceTree = "<group>"; };
 		62533DA3EADB1D3A524886AF /* AppBranding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBranding.swift; sourceTree = "<group>"; };
 		70073510CB9A14E301BA63F9 /* DNSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSService.swift; sourceTree = "<group>"; };
+		72A5D7B3A7C6B93517B67217 /* VPNPathEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VPNPathEvaluator.swift; sourceTree = "<group>"; };
 		74D5E7E1250837BE6A66018C /* ICMPPing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICMPPing.swift; sourceTree = "<group>"; };
 		76873EC3FE57B386B3BC9D81 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		796AA9EB01C60F878051F32A /* PingStat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PingStat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D01FB0B5327F3F176F3F19E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		977DCB59E911BDE414C16FDD /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A1659AE96406BFC6A44FFA3D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B9EED0A4C89829E8A807561C /* VpnNetworkExtensionDisplayName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnNetworkExtensionDisplayName.swift; sourceTree = "<group>"; };
 		BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityProbePolicy.swift; sourceTree = "<group>"; };
 		BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSUDPQuery.swift; sourceTree = "<group>"; };
 		BF70C8573F7B6164AFAAD15D /* NetworkMonitorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitorViewModel.swift; sourceTree = "<group>"; };
@@ -167,6 +171,8 @@
 				54DBDF9997E7AAA5B73DFFC1 /* LowDataModeProbeEligibility.swift */,
 				2AB8B91345867389E5154295 /* NativeNetworkConfiguration.swift */,
 				43B605F9D5B139919A4DA1D4 /* SystemDNSConfiguration.swift */,
+				B9EED0A4C89829E8A807561C /* VpnNetworkExtensionDisplayName.swift */,
+				72A5D7B3A7C6B93517B67217 /* VPNPathEvaluator.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -312,6 +318,8 @@
 				45EEC788693127CBB984774C /* StatusItemController.swift in Sources */,
 				A3DC855F3FA93B9A72B141F0 /* StatusPopoverView.swift in Sources */,
 				DC6E9E4D189DEA67BFDEB03F /* SystemDNSConfiguration.swift in Sources */,
+				DB24068A3A303EAA2D310B8D /* VPNPathEvaluator.swift in Sources */,
+				CFB9615B5E7855B8B1AF1DB2 /* VpnNetworkExtensionDisplayName.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,7 +348,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -348,7 +356,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.5;
 				PRODUCT_BUNDLE_IDENTIFIER = org.malcomvetter.PingStat;
 				PRODUCT_MODULE_NAME = PingStat;
 				PRODUCT_NAME = PingStat;
@@ -443,7 +451,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -451,7 +459,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.5;
 				PRODUCT_BUNDLE_IDENTIFIER = org.malcomvetter.PingStat;
 				PRODUCT_MODULE_NAME = PingStat;
 				PRODUCT_NAME = PingStat;

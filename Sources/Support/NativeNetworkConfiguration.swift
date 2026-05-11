@@ -39,15 +39,64 @@ enum NativeNetworkConfiguration {
         return nil
     }
 
+    /// User-visible service name from the **current** network set in System Settings (same source as the list in **Network**), for the service whose interface BSD name matches `interfaceName` (e.g. `utun4` for many VPN clients).
+    static func networkServiceDisplayName(forBSDInterface interfaceName: String) -> String? {
+        let bsd = interfaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !bsd.isEmpty else { return nil }
+        guard let prefs = SCPreferencesCreate(nil, "PingStat.NetworkServiceName" as CFString, nil) else {
+            return nil
+        }
+        guard SCPreferencesLock(prefs, true) else { return nil }
+        defer { SCPreferencesUnlock(prefs) }
+
+        guard let set = SCNetworkSetCopyCurrent(prefs) else { return nil }
+        guard let services = SCNetworkSetCopyServices(set) as? [SCNetworkService] else { return nil }
+
+        for service in services {
+            guard let iface = SCNetworkServiceGetInterface(service) else { continue }
+            guard let name = SCNetworkInterfaceGetBSDName(iface) as String?, name == bsd else { continue }
+            guard let display = SCNetworkServiceGetName(service) as String? else { return nil }
+            let t = display.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? nil : t
+        }
+        return nil
+    }
+
     // MARK: - Routing table (sysctl `PF_ROUTE`, parity with `netstat -rn -f inet` / `route -n get`)
 
     static func defaultIPv4GatewaysViaSysctl(preferredInterface: String) -> (preferred: String?, any: String?) {
         IPv4RouteTable.defaultGateways(preferredInterface: preferredInterface)
     }
 
-    /// First `AF_LINK` interface name on an IPv4 default route (`netstat -rn -f inet` default row).
+    /// Output `AF_LINK` interface on the preferred wide-Internet IPv4 route (see ``ipv4DefaultRouteInterfaceAndGateway()``).
     static func defaultRouteInterfaceNameFromSysctl() -> String? {
-        IPv4RouteTable.firstDefaultInterfaceName()
+        IPv4RouteTable.preferredWideInternetIPv4Route().interfaceName
+    }
+
+    /// Interface name and IPv4 next hop on the **preferred** wide-Internet IPv4 route from the routing table
+    /// (`0.0.0.0/0`, or WireGuard-style ``0.0.0.0/1`` + ``128.0.0.0/1`` splits). When several exist, a
+    /// ``utun`` / ``ppp`` / ``ipsec`` interface wins so VPN clients are detected even when a physical default remains.
+    static func ipv4DefaultRouteInterfaceAndGateway() -> (interfaceName: String?, gatewayIPv4: String?) {
+        IPv4RouteTable.preferredWideInternetIPv4Route()
+    }
+
+    /// First non-loopback IPv4 configured on the given BSD interface (e.g. the WireGuard tunnel address when no IPv4 gateway appears in the route message).
+    static func primaryIPv4Address(onBSDInterface interfaceName: String) -> String? {
+        let trimmed = interfaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return ipv4FromGetifaddrs(interfaceName: trimmed)
+    }
+
+    /// True for ``0.0.0.0/0``, ``0.0.0.0/1``, or ``128.0.0.0/1`` (common WireGuard / VPN split-default patterns).
+    internal static func isWideInternetIPv4DestinationAndMask(destinationIPv4: String, netmaskIPv4: String?) -> Bool {
+        let dest = destinationIPv4.trimmingCharacters(in: .whitespacesAndNewlines)
+        let mask = netmaskIPv4?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if dest == "128.0.0.0" {
+            return mask == "128.0.0.0"
+        }
+        guard dest == "0.0.0.0" else { return false }
+        guard let m = mask, !m.isEmpty else { return true }
+        return m == "0.0.0.0" || m == "128.0.0.0"
     }
 
     // MARK: - Manual DNS (parity with `networksetup -getdnsservers`)
@@ -75,6 +124,66 @@ enum NativeNetworkConfiguration {
     private static func copyDict(_ store: SCDynamicStore, _ path: String) -> [String: Any]? {
         guard let v = SCDynamicStoreCopyValue(store, path as CFString) else { return nil }
         return v as? [String: Any]
+    }
+
+    /// Enumerates kernel interface addresses (same idea as ``getifaddr`` for a single interface).
+    private static func ipv4FromGetifaddrs(interfaceName: String) -> String? {
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0, let first = head else { return nil }
+        defer { freeifaddrs(first) }
+
+        var candidates: [String] = []
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let node = ptr {
+            defer { ptr = node.pointee.ifa_next }
+
+            guard let addr = node.pointee.ifa_addr else { continue }
+            guard addr.pointee.sa_family == UInt8(AF_INET) else { continue }
+
+            let name = String(cString: node.pointee.ifa_name)
+            guard name == interfaceName else { continue }
+
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            let rc = getnameinfo(
+                addr,
+                socklen_t(addr.pointee.sa_len),
+                &host,
+                socklen_t(host.count),
+                nil,
+                0,
+                NI_NUMERICHOST
+            )
+            guard rc == 0 else { continue }
+
+            let ip = String(cString: host).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !ip.isEmpty, !ip.hasPrefix("127.") else { continue }
+            candidates.append(ip)
+        }
+
+        guard !candidates.isEmpty else { return nil }
+        let unique = Array(Set(candidates))
+        return unique.sorted { lhs, rhs in
+            let lLink = lhs.hasPrefix("169.254.")
+            let rLink = rhs.hasPrefix("169.254.")
+            if lLink != rLink { return !lLink }
+            return lhs < rhs
+        }.first
+    }
+
+    /// BSD interface names commonly used for VPN / tunnel endpoints (WireGuard, IPsec, PPP).
+    static func isLikelyVpnTunnelInterfaceName(_ name: String) -> Bool {
+        let n = name.lowercased()
+        if n.hasPrefix("utun") { return true }
+        if n.hasPrefix("ppp") { return true }
+        if n.contains("ipsec") { return true }
+        return false
+    }
+
+    /// True when the IPv4 routing dump includes a wide-Internet route (``0/0``, ``0/1``, ``128/1``) whose output interface resolves to `bsdInterface` (including via ``rtm_index`` when ``RTAX_IFP`` is absent).
+    static func hasWideInternetIPv4Route(onBSDInterface bsdInterface: String) -> Bool {
+        let name = bsdInterface.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return false }
+        return IPv4RouteTable.hasWideInternetIPv4Route(onBSDInterface: name)
     }
 }
 
@@ -108,13 +217,32 @@ private enum IPv4RouteTable {
                 guard msglen >= MemoryLayout<rt_msghdr>.size, offset + msglen <= count else { break }
 
                 let flags = Int(rtm.rtm_flags)
+                let rtmType = Int(rtm.rtm_type)
                 if rtm.rtm_version == RTM_VERSION, rtm.rtm_errno == 0,
-                   flags & Int(RTF_UP) != 0,
-                   flags & Int(RTF_GATEWAY) != 0 {
+                   Self.isRoutableRtmType(rtmType),
+                   flags & Int(RTF_UP) != 0 {
                     let msgRaw = UnsafeRawPointer(rtmPtr)
                     let addrs = extractAddresses(msgBase: msgRaw, rtm: rtm, limit: offset + msglen)
 
-                    guard isDefaultInetDestination(addrs[Int(RTAX_DST)]) else {
+                    guard isWideInternetInetRoute(
+                        dst: addrs[Int(RTAX_DST)],
+                        mask: addrs[Int(RTAX_NETMASK)],
+                        genmask: addrs[Int(RTAX_GENMASK)]
+                    ) else {
+                        offset += msglen
+                        continue
+                    }
+
+                    guard let ifName = resolvedOutputInterfaceName(
+                        linkSockaddr: addrs[Int(RTAX_IFP)],
+                        rtmIndex: rtm.rtm_index
+                    ), !ifName.isEmpty else {
+                        offset += msglen
+                        continue
+                    }
+
+                    let tunnel = NativeNetworkConfiguration.isLikelyVpnTunnelInterfaceName(ifName)
+                    guard (flags & Int(RTF_GATEWAY) != 0) || tunnel else {
                         offset += msglen
                         continue
                     }
@@ -123,8 +251,6 @@ private enum IPv4RouteTable {
                         offset += msglen
                         continue
                     }
-
-                    let ifName = linkInterfaceName(fromSockaddr: addrs[Int(RTAX_IFP)])
 
                     if ifName == preferredInterface, prefGw == nil {
                         prefGw = gwStr
@@ -141,8 +267,108 @@ private enum IPv4RouteTable {
     }
 
     private static func firstDefaultInterface(in data: Data) -> String? {
-        data.withUnsafeBytes { raw -> String? in
-            guard let rawBase = raw.baseAddress else { return nil }
+        preferredWideInternetIPv4Route(in: data).interfaceName
+    }
+
+    /// Collects ``0.0.0.0/0``, ``0.0.0.0/1``, and ``128.0.0.0/1`` routes; prefers a tunnel output interface.
+    private static func preferredWideInternetIPv4Route(in data: Data) -> (interfaceName: String?, gatewayIPv4: String?) {
+        data.withUnsafeBytes { raw -> (String?, String?) in
+            guard let rawBase = raw.baseAddress else { return (nil, nil) }
+            let base = UnsafeRawPointer(rawBase)
+            var offset = 0
+            let count = raw.count
+            var candidates: [(ifn: String, gw: String?)] = []
+            while offset + MemoryLayout<rt_msghdr>.size <= count {
+                let rtmPtr = base.advanced(by: offset).assumingMemoryBound(to: rt_msghdr.self)
+                let rtm = rtmPtr.pointee
+                let msglen = Int(rtm.rtm_msglen)
+                guard msglen >= MemoryLayout<rt_msghdr>.size, offset + msglen <= count else { break }
+
+                let flags = Int(rtm.rtm_flags)
+                let rtmType = Int(rtm.rtm_type)
+                if rtm.rtm_version == RTM_VERSION, rtm.rtm_errno == 0,
+                   Self.isRoutableRtmType(rtmType),
+                   flags & Int(RTF_UP) != 0 {
+                    let msgRaw = UnsafeRawPointer(rtmPtr)
+                    let addrs = extractAddresses(msgBase: msgRaw, rtm: rtm, limit: offset + msglen)
+
+                    guard isWideInternetInetRoute(
+                        dst: addrs[Int(RTAX_DST)],
+                        mask: addrs[Int(RTAX_NETMASK)],
+                        genmask: addrs[Int(RTAX_GENMASK)]
+                    ) else {
+                        offset += msglen
+                        continue
+                    }
+
+                    guard let ifn = resolvedOutputInterfaceName(
+                        linkSockaddr: addrs[Int(RTAX_IFP)],
+                        rtmIndex: rtm.rtm_index
+                    ), !ifn.isEmpty else {
+                        offset += msglen
+                        continue
+                    }
+
+                    let tunnel = NativeNetworkConfiguration.isLikelyVpnTunnelInterfaceName(ifn)
+                    guard (flags & Int(RTF_GATEWAY) != 0) || tunnel else {
+                        offset += msglen
+                        continue
+                    }
+
+                    let gw = ipv4String(fromSockaddr: addrs[Int(RTAX_GATEWAY)])
+                    candidates.append((ifn, gw))
+                }
+                offset += msglen
+            }
+            if let t = candidates.first(where: { NativeNetworkConfiguration.isLikelyVpnTunnelInterfaceName($0.ifn) }) {
+                return (t.ifn, t.gw)
+            }
+            if let first = candidates.first {
+                return (first.ifn, first.gw)
+            }
+            return (nil, nil)
+        }
+    }
+
+    /// ``NET_RT_DUMP`` includes interface / address events; skip types that are not IPv4 forwarding routes.
+    private static func isRoutableRtmType(_ type: Int) -> Bool {
+        let skip: Set<Int> = [
+            Int(RTM_IFINFO),
+            Int(RTM_NEWADDR),
+            Int(RTM_DELADDR),
+            Int(RTM_NEWMADDR),
+            Int(RTM_DELMADDR)
+        ]
+        return !skip.contains(type)
+    }
+
+    private static func interfaceNameFromRtmIndex(_ index: UInt16) -> String? {
+        guard index > 0 else { return nil }
+        var buf = [CChar](repeating: 0, count: Int(IF_NAMESIZE))
+        guard if_indextoname(UInt32(index), &buf) != nil else { return nil }
+        let s = String(cString: buf).trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? nil : s
+    }
+
+    private static func resolvedOutputInterfaceName(
+        linkSockaddr: UnsafePointer<sockaddr>?,
+        rtmIndex: UInt16
+    ) -> String? {
+        if let link = linkInterfaceName(fromSockaddr: linkSockaddr) {
+            let t = link.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { return t }
+        }
+        return interfaceNameFromRtmIndex(rtmIndex)
+    }
+
+    static func hasWideInternetIPv4Route(onBSDInterface bsd: String) -> Bool {
+        guard let data = sysctlRouteDump() else { return false }
+        return hasWideInternetIPv4Route(onBSDInterface: bsd, data: data)
+    }
+
+    private static func hasWideInternetIPv4Route(onBSDInterface bsd: String, data: Data) -> Bool {
+        data.withUnsafeBytes { raw -> Bool in
+            guard let rawBase = raw.baseAddress else { return false }
             let base = UnsafeRawPointer(rawBase)
             var offset = 0
             let count = raw.count
@@ -153,20 +379,59 @@ private enum IPv4RouteTable {
                 guard msglen >= MemoryLayout<rt_msghdr>.size, offset + msglen <= count else { break }
 
                 let flags = Int(rtm.rtm_flags)
+                let rtmType = Int(rtm.rtm_type)
                 if rtm.rtm_version == RTM_VERSION, rtm.rtm_errno == 0,
-                   flags & Int(RTF_UP) != 0,
-                   flags & Int(RTF_GATEWAY) != 0 {
+                   Self.isRoutableRtmType(rtmType),
+                   flags & Int(RTF_UP) != 0 {
                     let msgRaw = UnsafeRawPointer(rtmPtr)
                     let addrs = extractAddresses(msgBase: msgRaw, rtm: rtm, limit: offset + msglen)
-                    if isDefaultInetDestination(addrs[Int(RTAX_DST)]),
-                       let ifn = linkInterfaceName(fromSockaddr: addrs[Int(RTAX_IFP)]), !ifn.isEmpty {
-                        return ifn
+
+                    guard isWideInternetInetRoute(
+                        dst: addrs[Int(RTAX_DST)],
+                        mask: addrs[Int(RTAX_NETMASK)],
+                        genmask: addrs[Int(RTAX_GENMASK)]
+                    ) else {
+                        offset += msglen
+                        continue
                     }
+
+                    guard let ifn = resolvedOutputInterfaceName(
+                        linkSockaddr: addrs[Int(RTAX_IFP)],
+                        rtmIndex: rtm.rtm_index
+                    ), ifn == bsd else {
+                        offset += msglen
+                        continue
+                    }
+
+                    let tunnel = NativeNetworkConfiguration.isLikelyVpnTunnelInterfaceName(ifn)
+                    guard (flags & Int(RTF_GATEWAY) != 0) || tunnel else {
+                        offset += msglen
+                        continue
+                    }
+                    return true
                 }
                 offset += msglen
             }
-            return nil as String?
+            return false
         }
+    }
+
+    private static func isWideInternetInetRoute(
+        dst: UnsafePointer<sockaddr>?,
+        mask: UnsafePointer<sockaddr>?,
+        genmask: UnsafePointer<sockaddr>?
+    ) -> Bool {
+        guard let dStr = ipv4String(fromSockaddr: dst) else { return false }
+        let mStr = ipv4String(fromSockaddr: mask) ?? ipv4String(fromSockaddr: genmask)
+        return NativeNetworkConfiguration.isWideInternetIPv4DestinationAndMask(
+            destinationIPv4: dStr,
+            netmaskIPv4: mStr
+        )
+    }
+
+    static func preferredWideInternetIPv4Route() -> (interfaceName: String?, gatewayIPv4: String?) {
+        guard let data = sysctlRouteDump() else { return (nil, nil) }
+        return preferredWideInternetIPv4Route(in: data)
     }
 
     private static func sysctlRouteDump() -> Data? {
@@ -206,13 +471,6 @@ private enum IPv4RouteTable {
             off += roundup(saLen)
         }
         return out
-    }
-
-    private static func isDefaultInetDestination(_ sa: UnsafePointer<sockaddr>?) -> Bool {
-        guard let sa else { return false }
-        guard sa.pointee.sa_family == UInt8(AF_INET) else { return false }
-        let sin = UnsafeRawPointer(sa).assumingMemoryBound(to: sockaddr_in.self).pointee
-        return sin.sin_addr.s_addr == 0
     }
 
     private static func ipv4String(fromSockaddr sa: UnsafePointer<sockaddr>?) -> String? {

@@ -7,6 +7,7 @@ struct DebugExportPayload: Codable {
     let snapshot: HealthSnapshot
     let endpoints: [EndpointStatus]
     let dnsStatus: DNSCheckStatus
+    let dnsStatusVPN: DNSCheckStatus
     let logs: [LogEntry]
 }
 

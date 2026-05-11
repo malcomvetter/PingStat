@@ -95,7 +95,7 @@ final class HealthEvaluator {
             return suffixLDM((.offline, "DNS timed out on all servers"), input: input)
         }
 
-        if allMonitoredPingsTimedOut(endpointStatuses: input.endpointStatuses) {
+        if allMonitoredPingsTimedOut(endpointStatuses: input.endpointStatuses, context: input.context) {
             return suffixLDM((.offline, "All monitored endpoints timed out"), input: input)
         }
 
@@ -131,8 +131,11 @@ final class HealthEvaluator {
         return (pair.state, pair.reason + " – Low Data Mode")
     }
 
-    private func allMonitoredPingsTimedOut(endpointStatuses: [EndpointKind: EndpointStatus]) -> Bool {
-        let monitors = Array(endpointStatuses.values).filter(\.icmpProbingActive)
+    private func allMonitoredPingsTimedOut(endpointStatuses: [EndpointKind: EndpointStatus], context: NetworkContext) -> Bool {
+        let monitors = Array(endpointStatuses.values).filter(\.icmpProbingActive).filter { ep in
+            if context.vpnPathActive, ep.kind == .gateway { return false }
+            return true
+        }
         guard !monitors.isEmpty else { return false }
         guard monitors.allSatisfy({ $0.latest != nil }) else { return false }
         return monitors.allSatisfy { status in
