@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 # Build a Release PingStat.app (ad-hoc / local signing, no Developer ID) and wrap it in a .dmg
-# with a Finder-style layout (background, drag-to-Applications).
-#
-# Local default: vendored create-dmg + AppleScript (osascript) for the polished window.
-# GitHub Actions / headless: set GITHUB_ACTIONS (set automatically on runners) or
-# PINGSTAT_DMG_USE_DMGBUILD=1 to build the same layout via Python ``dmgbuild`` (no Finder).
+# with a Finder-style layout (background, drag-to-Applications) via vendored create-dmg + AppleScript.
 #
 # Output: dist/PingStat-<version>.dmg  (dist/ is gitignored)
 #
@@ -13,10 +9,8 @@
 #
 # Env:
 #   PINGSTAT_DMG_REUSE_APP=/path/PingStat.app — skip xcodebuild; package this bundle (e.g. after build-release.sh).
-#   PINGSTAT_DMG_SKIP_LAYOUT=1 — with create-dmg only: pass --skip-jenkins (no AppleScript; plain window).
-#   PINGSTAT_DMG_USE_DMGBUILD=1 — force dmgbuild instead of create-dmg (same look as CI).
-#   PINGSTAT_DMG_NO_OPEN=1 — do not ``open`` the finished .dmg (CI).
-#       Many shells export CI=1 for unrelated reasons; we do not read CI here.
+#   PINGSTAT_DMG_SKIP_LAYOUT=1 — pass --skip-jenkins to create-dmg (no Finder/osascript; plain window).
+#   PINGSTAT_DMG_NO_OPEN=1 — do not ``open`` the finished .dmg.
 
 set -euo pipefail
 
@@ -101,79 +95,58 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 python3 "$ROOT/scripts/dmg/make_background.py" "$BG"
 
+CREATE_DMG="$ROOT/scripts/third_party/create-dmg/create-dmg"
 USE_LAYOUT=0
 DMG_STYLE="plain-hdiutil"
-
-USE_DMGBUILD=0
-if [[ "${GITHUB_ACTIONS:-}" == "true" ]] || [[ "${PINGSTAT_DMG_USE_DMGBUILD:-}" == "1" ]]; then
-  USE_DMGBUILD=1
-fi
-
-if [[ "$USE_DMGBUILD" -eq 1 ]]; then
-  echo "Creating polished DMG via dmgbuild (headless-safe, same layout as create-dmg)…" >&2
-  if python3 "$ROOT/scripts/dmg/build_polished_dmg.py" \
-    --app "$APP" \
-    --output "$DMG" \
-    --volume-name "PingStat ${VERSION}" \
-    --background "$BG"; then
-    USE_LAYOUT=1
-    DMG_STYLE="dmgbuild-polished"
+if [[ -f "$CREATE_DMG" ]]; then
+  [[ -x "$CREATE_DMG" ]] || chmod +x "$CREATE_DMG"
+  CDMG_CMD=(
+    "$CREATE_DMG"
+    --volname "PingStat ${VERSION}"
+    --background "$BG"
+    --window-pos 200 120
+    --window-size 660 420
+    --icon-size 100
+    --text-size 12
+    --icon "PingStat.app" 150 200
+    --hide-extension "PingStat.app"
+    --app-drop-link 500 200
+    --format UDZO
+  )
+  if [[ "${PINGSTAT_DMG_SKIP_LAYOUT:-}" == "1" ]]; then
+    CDMG_CMD+=(--skip-jenkins)
+    echo "PINGSTAT_DMG_SKIP_LAYOUT=1: create-dmg will skip Finder/osascript (no custom window look)." >&2
   else
-    echo "error: dmgbuild failed (pip3 install dmgbuild on the runner?)" >&2
-    exit 1
+    echo "Creating polished DMG (create-dmg + Finder via osascript). Grant Automation if macOS prompts." >&2
+  fi
+  CDMG_CMD+=("$DMG" "$LAYOUT")
+  set +e
+  "${CDMG_CMD[@]}"
+  CDMG_EXIT=$?
+  set -e
+  if [[ $CDMG_EXIT -eq 0 ]]; then
+    USE_LAYOUT=1
+    if [[ "${PINGSTAT_DMG_SKIP_LAYOUT:-}" == "1" ]]; then
+      DMG_STYLE="create-dmg-unstyled"
+    else
+      DMG_STYLE="create-dmg-polished"
+    fi
+  else
+    echo "create-dmg exited $CDMG_EXIT; falling back to plain hdiutil DMG…" >&2
+    echo "If you expected a styled window, check the log above (osascript often fails without GUI access)." >&2
+    rm -f "$DMG"
   fi
 else
-  CREATE_DMG="$ROOT/scripts/third_party/create-dmg/create-dmg"
-  if [[ -f "$CREATE_DMG" ]]; then
-    [[ -x "$CREATE_DMG" ]] || chmod +x "$CREATE_DMG"
-    CDMG_CMD=(
-      "$CREATE_DMG"
-      --volname "PingStat ${VERSION}"
-      --background "$BG"
-      --window-pos 200 120
-      --window-size 660 420
-      --icon-size 100
-      --text-size 12
-      --icon "PingStat.app" 150 200
-      --hide-extension "PingStat.app"
-      --app-drop-link 500 200
-      --format UDZO
-    )
-    if [[ "${PINGSTAT_DMG_SKIP_LAYOUT:-}" == "1" ]]; then
-      CDMG_CMD+=(--skip-jenkins)
-      echo "PINGSTAT_DMG_SKIP_LAYOUT=1: create-dmg will skip Finder/osascript (no custom window look)." >&2
-    else
-      echo "Creating polished DMG (create-dmg + Finder via osascript). Grant Automation if macOS prompts." >&2
-    fi
-    CDMG_CMD+=("$DMG" "$LAYOUT")
-    set +e
-    "${CDMG_CMD[@]}"
-    CDMG_EXIT=$?
-    set -e
-    if [[ $CDMG_EXIT -eq 0 ]]; then
-      USE_LAYOUT=1
-      if [[ "${PINGSTAT_DMG_SKIP_LAYOUT:-}" == "1" ]]; then
-        DMG_STYLE="create-dmg-unstyled"
-      else
-        DMG_STYLE="create-dmg-polished"
-      fi
-    else
-      echo "create-dmg exited $CDMG_EXIT; falling back to plain hdiutil DMG…" >&2
-      echo "If you expected a styled window, check the log above (osascript often fails without GUI access)." >&2
-      rm -f "$DMG"
-    fi
-  else
-    echo "Vendored create-dmg not found at $CREATE_DMG; using plain hdiutil DMG…" >&2
-  fi
+  echo "Vendored create-dmg not found at $CREATE_DMG; using plain hdiutil DMG…" >&2
+fi
 
-  if [[ "$USE_LAYOUT" -ne 1 ]]; then
-    STAGE="$ROOT/dist/dmg-staging"
-    rm -rf "$STAGE"
-    mkdir -p "$STAGE"
-    ditto "$APP" "$STAGE/PingStat.app"
-    ln -sf /Applications "$STAGE/Applications"
-    create_plain_dmg "$STAGE"
-  fi
+if [[ "$USE_LAYOUT" -ne 1 ]]; then
+  STAGE="$ROOT/dist/dmg-staging"
+  rm -rf "$STAGE"
+  mkdir -p "$STAGE"
+  ditto "$APP" "$STAGE/PingStat.app"
+  ln -sf /Applications "$STAGE/Applications"
+  create_plain_dmg "$STAGE"
 fi
 
 echo "Done: $DMG"
@@ -184,11 +157,8 @@ case "$DMG_STYLE" in
   create-dmg-unstyled)
     echo "DMG style: create-dmg without Finder layout (--skip-jenkins). Set PINGSTAT_DMG_SKIP_LAYOUT=0 for full look." >&2
     ;;
-  dmgbuild-polished)
-    echo "DMG style: polished (dmgbuild: background, icon positions, Applications link)." >&2
-    ;;
   *)
-    echo "DMG style: plain folder (hdiutil). No styled layout step ran successfully." >&2
+    echo "DMG style: plain folder (hdiutil). No create-dmg Finder step ran successfully." >&2
     ;;
 esac
 if [[ -z "${PINGSTAT_DMG_NO_OPEN:-}" ]]; then

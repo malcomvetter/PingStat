@@ -1,4 +1,5 @@
-# On version tag push: build ad-hoc Release .app, zip + polished DMG (dmgbuild), publish a GitHub Release.
+# On version tag push: build ad-hoc Release .app + zip, publish a GitHub Release.
+# DMG (polished create-dmg layout) is built locally and uploaded — see scripts/upload-release-dmg.sh.
 name: Release build
 
 on:
@@ -16,33 +17,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          # Full history helps generated release notes and any git-based versioning.
           fetch-depth: 0
 
       - name: Install xcodegen
         run: brew install xcodegen
-
-      - name: Install dmgbuild (DMG window layout without Finder AppleScript)
-        run: pip3 install dmgbuild
 
       - name: Build release zip (ad-hoc; no Apple secrets)
         env:
           PINGSTAT_ADHOC_SIGN: "1"
         run: bash scripts/build-release.sh
 
-      - name: Build polished DMG (reuse .app from zip step)
-        env:
-          PINGSTAT_DMG_NO_OPEN: "1"
-          PINGSTAT_DMG_REUSE_APP: "${{ github.workspace }}/dist/PingStat.app"
-        run: bash scripts/package-dmg.sh
-
-      - name: Upload build artifacts (zip + dmg)
+      - name: Upload build artifact (zip)
         uses: actions/upload-artifact@v7
         with:
-          name: PingStat-macos-release
-          path: |
-            dist/*.zip
-            dist/*.dmg
+          name: PingStat-macos-zip
+          path: dist/*.zip
           if-no-files-found: error
 
       - name: Publish GitHub Release
@@ -50,6 +39,4 @@ jobs:
         with:
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: |
-            dist/*.zip
-            dist/*.dmg
+          files: dist/*.zip
