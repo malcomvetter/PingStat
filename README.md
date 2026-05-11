@@ -76,9 +76,17 @@ Both `build.sh` and `test.sh` regenerate the Xcode project from `project.yml` be
 
 ## Unsigned release artifacts (no Apple Developer ID)
 
-- **DMG (drag to Applications):** from the repo root, run `./scripts/package-dmg.sh`. This regenerates the Xcode project, builds **Release** with ad-hoc / local signing, then writes `dist/PingStat-<version>.dmg` using the vendored [create-dmg](https://github.com/create-dmg/create-dmg) helper (MIT: `scripts/third_party/create-dmg/LICENSE-create-dmg`) plus Finder (AppleScript) for the polished window: background PNG, **PingStat.app**, and an **Applications** drop link. After `./scripts/build-release.sh`, reuse the app with `PINGSTAT_DMG_REUSE_APP="$PWD/dist/PingStat.app" ./scripts/package-dmg.sh` to skip a second compile. If `create-dmg` fails, the script falls back to a plain `hdiutil` image. Optional: `PINGSTAT_DMG_SKIP_LAYOUT=1` passes create-dmg’s `--skip-jenkins` (no Finder step). The `dist/` folder is gitignored.
-- **ZIP (alternate):** `./scripts/build-release.sh` with `PINGSTAT_ADHOC_SIGN=1` produces `dist/PingStat.app` and a versioned zip (see that script’s header).
-- **GitHub Releases:** pushing a tag `v*` runs `.github/workflows/release.yml`, which builds the **zip** and publishes a **Release** with that asset. To attach the polished **DMG** (same layout as local `package-dmg.sh`), after the workflow finishes run `./scripts/upload-release-dmg.sh vX.Y.Z` on your Mac ([GitHub CLI](https://cli.github.com/) `gh auth login` required). That script runs `build-release.sh` and `package-dmg.sh`, then `gh release upload` for the DMG only.
+Releases are built **entirely on your Mac** (no GitHub Actions build for binaries). Use **`./scripts/release.sh`** from a **clean git tree** on the branch you want to ship (usually `main`). It:
+
+1. Runs **`scripts/test.sh`** (fails the release if tests fail).
+2. Bumps **`MARKETING_VERSION`** by one **patch** (e.g. `1.0.8` → `1.0.9`) and increments **`CURRENT_PROJECT_VERSION`** in **`project.yml`**, then **`xcodegen generate`**.
+3. Runs **`PINGSTAT_ADHOC_SIGN=1 scripts/build-release.sh`** (Release archive → `dist/PingStat.app` + versioned **zip**).
+4. Runs **`scripts/package-dmg.sh`** with the same app (**create-dmg** + Finder for the polished **DMG**).
+5. Commits the version bump, **pushes the branch**, creates and **pushes tag `vX.Y.Z`**, and **`gh release create`** with both the zip and DMG.
+
+Prerequisites: full Xcode, **xcodegen**, Python 3, and **[GitHub CLI](https://cli.github.com/)** (`brew install gh` then **`gh auth login`**). Dry run: **`./scripts/release.sh --dry-run`**. To allow uncommitted changes (not recommended): **`PINGSTAT_RELEASE_ALLOW_DIRTY=1 ./scripts/release.sh`**.
+
+Manual pieces (without bumping): **`./scripts/build-release.sh`** with **`PINGSTAT_ADHOC_SIGN=1`** for zip only; **`./scripts/package-dmg.sh`** (or reuse **`PINGSTAT_DMG_REUSE_APP="$PWD/dist/PingStat.app"`** after a release build) for the DMG. **`dist/`** is gitignored.
 
 These builds are **not notarized**; downloaders will need **Control-click → Open** (or **Privacy & Security → Open Anyway**) the first time.
 
