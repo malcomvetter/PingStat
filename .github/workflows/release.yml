@@ -15,6 +15,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Full history helps generated release notes and any git-based versioning.
+          fetch-depth: 0
 
       - name: Install xcodegen
         run: brew install xcodegen
@@ -46,6 +49,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             dist/*.zip
             dist/*.dmg
