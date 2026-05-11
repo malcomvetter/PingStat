@@ -14,3 +14,6 @@ dist/
 
 # SwiftPM (if added later)
 .swiftpm/
+
+# Local Python venvs (e.g. dmgbuild experiments)
+.venv*/
