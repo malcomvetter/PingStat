@@ -8,6 +8,9 @@ final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private var cancellables = Set<AnyCancellable>()
+    private var statusBarChromeInstalled = false
+    private var statusBarButtonNilRetries = 0
+    private var didLogStatusBarIconDiagnostics = false
 
     init(viewModel: NetworkMonitorViewModel) {
         self.viewModel = viewModel
@@ -17,27 +20,68 @@ final class StatusItemController: NSObject {
     }
 
     func setup() {
-        guard let button = statusItem.button else { return }
-        button.target = self
-        button.action = #selector(statusItemClicked(_:))
-        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        applyStatusBarIcon()
-        // Only refresh on health-state / startup-grace changes — `snapshot` is reassigned every ping with a new `updatedAt`, which would redraw the status item ~1 Hz and spam AppKit fence logs.
-        Publishers.CombineLatest3(
-            viewModel.$snapshot.map(\.state).removeDuplicates(),
-            viewModel.$statusBarIconReflectsLiveHealth.removeDuplicates(),
-            viewModel.$lowDataModePathActive.removeDuplicates()
-        )
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self] _, _, _ in
-            self?.applyStatusBarIcon()
-        }
-        .store(in: &cancellables)
+        installStatusBarChromeIfPossible()
+    }
 
-        popover.behavior = .transient
-        popover.animates = true
-        popover.delegate = self
-        // Popover content is installed only while shown so SwiftUI is not rebuilt on every ping/DNS tick.
+    /// `NSStatusItem.button` can be nil on the same runloop turn as creation; retry on the main queue instead of skipping all wiring.
+    private func installStatusBarChromeIfPossible() {
+        guard let button = statusItem.button else {
+            if statusBarButtonNilRetries >= 30 {
+                LoggingService.shared.log(
+                    .error,
+                    category: .statusItem,
+                    "event=status_item_button_nil_exhausted nil_checks=\(statusBarButtonNilRetries) message=NSStatusItem.button never appeared; menu bar wiring skipped"
+                )
+                return
+            }
+            statusBarButtonNilRetries += 1
+            DispatchQueue.main.async { [weak self] in
+                self?.installStatusBarChromeIfPossible()
+            }
+            return
+        }
+        let nilButtonChecksBeforeSuccess = statusBarButtonNilRetries
+        statusBarButtonNilRetries = 0
+
+        if #available(macOS 11.0, *) {
+            statusItem.isVisible = true
+        }
+
+        if !statusBarChromeInstalled {
+            statusBarChromeInstalled = true
+            let visible: String
+            if #available(macOS 11.0, *) {
+                visible = statusItem.isVisible ? "true" : "false"
+            } else {
+                visible = "n/a"
+            }
+            LoggingService.shared.log(
+                .notice,
+                category: .statusItem,
+                "event=status_bar_chrome_installed nil_checks_before_success=\(nilButtonChecksBeforeSuccess) button_frame=\(button.frame.size.width)x\(button.frame.size.height) is_hidden=\(button.isHidden) item_isVisible=\(visible)"
+            )
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            // Only refresh on health-state / startup-grace changes — `snapshot` is reassigned every ping with a new `updatedAt`, which would redraw the status item ~1 Hz and spam AppKit fence logs.
+            Publishers.CombineLatest3(
+                viewModel.$snapshot.map(\.state).removeDuplicates(),
+                viewModel.$statusBarIconReflectsLiveHealth.removeDuplicates(),
+                viewModel.$lowDataModePathActive.removeDuplicates()
+            )
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _, _, _ in
+                self?.applyStatusBarIcon()
+            }
+            .store(in: &cancellables)
+
+            popover.behavior = .transient
+            popover.animates = true
+            popover.delegate = self
+            // Popover content is installed only while shown so SwiftUI is not rebuilt on every ping/DNS tick.
+        }
+
+        applyStatusBarIcon()
     }
 
     private func ensurePopoverContentInstalled() {
@@ -161,27 +205,49 @@ final class StatusItemController: NSObject {
 
     private func applyStatusBarButton(startupMark: Bool, healthForMark: NetworkHealthState, liveHealthState: NetworkHealthState) {
         guard let button = statusItem.button else { return }
+        if #available(macOS 11.0, *) {
+            statusItem.isVisible = true
+        }
+
         let axSummary = startupMark ? "Starting up" : liveHealthState.title
         let pointSize: CGFloat = 14
         let baseConfig = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
         let symbolName = HealthAppearance.statusHealthSymbolName(startupMark: startupMark, health: healthForMark)
         let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: axSummary)
 
-        let image: NSImage?
-        if startupMark {
-            // Template: system draws the same foreground as other monochrome menu bar extras (light on dark bar, dark on light).
-            image = base?.withSymbolConfiguration(baseConfig)
-            image?.isTemplate = true
-        } else {
-            let color = HealthAppearance.statusHealthMarkNSColor(startupMark: false, health: healthForMark)
-            let palette = NSImage.SymbolConfiguration(paletteColors: [color])
-            let combined = baseConfig.applying(palette)
-            image = base?.withSymbolConfiguration(combined)
-            image?.isTemplate = false
-        }
+        // Always template + `contentTintColor` for live tint. Palette-colored non-template symbols have
+        // been observed to draw as empty in `NSStatusBarButton` on some macOS versions while the app runs.
+        let image = base?.withSymbolConfiguration(baseConfig)
+        image?.isTemplate = true
         button.image = image
+        if startupMark {
+            // Explicit label color: `nil` can leave a template SF Symbol effectively invisible on some menu bar / OS combinations.
+            button.contentTintColor = .labelColor
+        } else {
+            button.contentTintColor = HealthAppearance.statusHealthMarkNSColor(startupMark: false, health: healthForMark)
+        }
+
         let ldm = viewModel.lowDataModePathActive ? " – Low Data Mode" : ""
         button.toolTip = "\(AppBranding.productName) - Network \(liveHealthState.title)\(ldm)"
+
+        if !didLogStatusBarIconDiagnostics {
+            didLogStatusBarIconDiagnostics = true
+            let img = button.image
+            let w = img.map { Int($0.size.width) } ?? -1
+            let h = img.map { Int($0.size.height) } ?? -1
+            let tpl = img?.isTemplate == true
+            let vis: String
+            if #available(macOS 11.0, *) {
+                vis = statusItem.isVisible ? "true" : "false"
+            } else {
+                vis = "n/a"
+            }
+            LoggingService.shared.log(
+                .notice,
+                category: .statusItem,
+                "event=status_bar_icon_applied symbol=\(symbolName) image_nil=\(img == nil) size=\(w)x\(h) isTemplate=\(tpl) is_hidden=\(button.isHidden) item_isVisible=\(vis) startup=\(startupMark)"
+            )
+        }
     }
 
     private func addDNSStatusItems(to menu: NSMenu) {

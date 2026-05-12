@@ -1,6 +1,7 @@
 # Xcode / build
 .build/
 DerivedData/
+xcuserdata/
 *.xcarchive
 *.xcresult
 *.ipa
@@ -17,3 +18,6 @@ dist/
 
 # Local Python venvs (e.g. dmgbuild experiments)
 .venv*/
+
+# Local code-sign env (DEVELOPMENT_TEAM, optional CODE_SIGN_*); never commit
+.pingstat-signing.env

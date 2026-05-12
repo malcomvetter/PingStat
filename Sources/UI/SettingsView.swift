@@ -265,7 +265,7 @@ struct SettingsView: View {
                     Section("Diagnostics & Logs") {
                         VStack(alignment: .leading, spacing: 10) {
                             Text(
-                                "PingStat records lifecycle and probe events with Apple’s unified logging (the same subsystem Console.app and Terminal’s log(1) use). Lifecycle lines use the category app.lifecycle; probes use probe.ping, probe.dns, and related categories."
+                                "PingStat records lifecycle and probe events with Apple’s unified logging (the same subsystem Console.app and Terminal’s log(1) use). Lifecycle lines use the category app.lifecycle; probes use probe.ping, probe.dns, and related categories. The menu bar item logs under category ui.statusitem (events status_bar_chrome_installed, status_bar_icon_applied, or status_item_button_nil_exhausted)."
                             )
                             .font(.callout)
                             .foregroundStyle(.secondary)

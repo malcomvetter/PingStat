@@ -8,6 +8,8 @@ enum LogCategory: String, CaseIterable, Codable {
     case dns = "probe.dns"
     case health = "health.state"
     case ui = "ui.popover"
+    /// Menu bar `NSStatusItem` install and icon apply (filter: `category:ui.statusitem`).
+    case statusItem = "ui.statusitem"
     case config = "config"
     case errors = "errors"
 }

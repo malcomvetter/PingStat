@@ -24,6 +24,13 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         INFOPLIST_KEY_LSUIElement: YES
         CODE_SIGN_STYLE: Automatic
+      configs:
+        # Release must not force "Apple Development" or `xcodebuild archive` will require a Mac
+        # Development cert even when distributing with Developer ID.
+        Debug:
+          "CODE_SIGN_IDENTITY[sdk=macosx*]": Apple Development
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
     dependencies: []
   PingStatTests:
     type: bundle.unit-test
