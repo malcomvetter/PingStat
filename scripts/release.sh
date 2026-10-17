@@ -186,7 +186,7 @@ fi
 
 echo "==> Committing version bump"
 git add project.yml PingStat.xcodeproj/project.pbxproj
-git commit -m "Release ${VERSION} (build ${BUILD})"
+git commit -m "chore(release): ${VERSION} (build ${BUILD})"
 
 echo "==> Pushing branch $BRANCH and tag $TAG"
 git push origin "$BRANCH"
