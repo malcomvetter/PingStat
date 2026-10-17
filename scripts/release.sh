@@ -19,6 +19,9 @@
 #
 # Environment:
 #   PINGSTAT_RELEASE_ALLOW_DIRTY=1   allow a dirty working tree (default: require clean)
+#
+# Versioning: if tag v<MARKETING_VERSION> is not on origin yet, that version ships unchanged (first
+# release); otherwise the patch and build number are bumped first.
 
 set -euo pipefail
 
@@ -79,8 +82,18 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   trap 'ec=$?; echo "error: release failed (exit $ec); restoring project.yml / pbxproj from last commit" >&2; restore_version_files; exit "$ec"' ERR
 fi
 
-echo "==> Bumping MARKETING_VERSION (patch) and CURRENT_PROJECT_VERSION in project.yml"
-if [[ "$DRY_RUN" -eq 1 ]]; then
+CUR_MARKETING="$(sed -n 's/^[[:space:]]*MARKETING_VERSION:[[:space:]]*"\([0-9.]*\)".*/\1/p' project.yml | head -1)"
+CUR_BUILD="$(sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION:[[:space:]]*"\([0-9]*\)".*/\1/p' project.yml | head -1)"
+[[ -n "$CUR_MARKETING" && -n "$CUR_BUILD" ]] || die "could not read MARKETING_VERSION / CURRENT_PROJECT_VERSION from project.yml"
+
+# Ship the version in project.yml as-is until it has been tagged on origin; after that, bump the patch.
+if ! git ls-remote --tags origin "refs/tags/v${CUR_MARKETING}" | grep -q .; then
+  echo "==> v${CUR_MARKETING} not yet released; shipping project.yml version as-is"
+  NEW_MARKETING="$CUR_MARKETING"
+  NEW_BUILD="$CUR_BUILD"
+  [[ "$DRY_RUN" -eq 1 ]] && echo "[dry-run] next marketing version would be: $NEW_MARKETING (build $NEW_BUILD)"
+elif [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "==> Bumping MARKETING_VERSION (patch) and CURRENT_PROJECT_VERSION in project.yml"
   echo "[dry-run] would bump versions in project.yml then run xcodegen"
   NEW_MARKETING="$(python3 - <<'PY'
 import pathlib, re
@@ -101,6 +114,7 @@ PY
 )"
   echo "[dry-run] next marketing version would be: $NEW_MARKETING (build $NEW_BUILD)"
 else
+  echo "==> Bumping MARKETING_VERSION (patch) and CURRENT_PROJECT_VERSION in project.yml"
   OUT="$(python3 <<'PY'
 import pathlib
 import re
