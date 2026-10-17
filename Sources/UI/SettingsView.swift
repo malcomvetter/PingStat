@@ -25,6 +25,14 @@ struct SettingsView: View {
                                 set: { updates.setAutomaticallyChecksForUpdates($0) }
                             )
                         )
+                        Toggle(
+                            "Automatically install updates",
+                            isOn: Binding(
+                                get: { updates.automaticallyDownloadsUpdates },
+                                set: { updates.setAutomaticallyDownloadsUpdates($0) }
+                            )
+                        )
+                        .disabled(!updates.automaticallyChecksForUpdates)
                         LabeledContent("Installed version", value: AppVersion.marketingAndBuild)
                         Button("Check for Updates…") {
                             updates.checkForUpdates()

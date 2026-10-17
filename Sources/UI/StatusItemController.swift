@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import ServiceManagement
 
 @MainActor
 final class StatusItemController: NSObject {
@@ -91,6 +92,10 @@ final class StatusItemController: NSObject {
 
             observeMenuBarOcclusionChanges(button: button)
             scheduleMenuBarVisibilityChecks()
+            // After the last visibility check (5 s) so the two first-run alerts never stack.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
+                self?.promptForLaunchAtLoginIfNeeded()
+            }
         }
 
         applyStatusBarIcon()
@@ -183,6 +188,32 @@ final class StatusItemController: NSObject {
         let response = alert.runModal()
         if response == .alertFirstButtonReturn {
             Self.openSystemMenuBarSettings()
+        }
+    }
+
+    private func promptForLaunchAtLoginIfNeeded() {
+        guard viewModel.settingsStore.consumeLaunchAtLoginPrompt() else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Start PingStat when you log in?"
+        alert.informativeText = "PingStat works best running all the time. You can change this later in Settings."
+        alert.addButton(withTitle: "Start at Login")
+        alert.addButton(withTitle: "Not Now")
+        let accepted = alert.runModal() == .alertFirstButtonReturn
+        LoggingService.shared.log(.notice, category: .lifecycle, "event=launch_at_login_prompt accepted=\(accepted)")
+        guard accepted, !viewModel.enableLaunchAtLogin() else { return }
+
+        let failure = NSAlert()
+        failure.messageText = "macOS didn’t enable PingStat at login"
+        failure.informativeText = """
+        This Mac may block login items by policy, or PingStat needs approval. \
+        Check System Settings → General → Login Items & Extensions.
+        """
+        failure.alertStyle = .warning
+        failure.addButton(withTitle: "Open Login Items")
+        failure.addButton(withTitle: "OK")
+        if failure.runModal() == .alertFirstButtonReturn {
+            SMAppService.openSystemSettingsLoginItems()
         }
     }
 

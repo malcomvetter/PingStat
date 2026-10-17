@@ -29,7 +29,8 @@ targets:
         SURequireSignedFeed: true
         SUVerifyUpdateBeforeExtraction: true
         SUEnableJavaScript: false
-        SUScheduledCheckInterval: 86400
+        SUScheduledCheckInterval: 21600
+        SUAutomaticallyUpdate: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.malcomvetter.PingStat

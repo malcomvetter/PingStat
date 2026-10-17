@@ -4,6 +4,24 @@ import XCTest
 
 @MainActor
 final class PingStatTests: XCTestCase {
+    func testLaunchAtLoginPromptOnlyOnceOnFreshInstall() throws {
+        let suite = "PingStatTests.\(UUID().uuidString)"
+        let fresh = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { fresh.removePersistentDomain(forName: suite) }
+        let store = SettingsStore(defaults: fresh)
+        XCTAssertTrue(store.isFirstLaunch)
+        XCTAssertTrue(store.consumeLaunchAtLoginPrompt())
+        XCTAssertFalse(store.consumeLaunchAtLoginPrompt())
+
+        let existingSuite = "PingStatTests.\(UUID().uuidString)"
+        let existing = try XCTUnwrap(UserDefaults(suiteName: existingSuite))
+        defer { existing.removePersistentDomain(forName: existingSuite) }
+        existing.set(try JSONEncoder().encode(AppConfig.defaults), forKey: "PingStat.AppConfig")
+        let upgraded = SettingsStore(defaults: existing)
+        XCTAssertFalse(upgraded.isFirstLaunch)
+        XCTAssertFalse(upgraded.consumeLaunchAtLoginPrompt())
+    }
+
     func testConnectivityProbePolicySkipsICMPAndDNSWhenPathUnsatisfied() {
         XCTAssertFalse(ConnectivityProbePolicy.shouldRunICMPProbes(pathSatisfied: false))
         XCTAssertFalse(ConnectivityProbePolicy.shouldRunDNSProbes(pathSatisfied: false))

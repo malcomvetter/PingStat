@@ -8,6 +8,7 @@ final class UpdateService: NSObject, ObservableObject {
     static let shared = UpdateService()
 
     @Published private(set) var automaticallyChecksForUpdates = false
+    @Published private(set) var automaticallyDownloadsUpdates = false
 
     private var controller: SPUStandardUpdaterController!
 
@@ -19,10 +20,11 @@ final class UpdateService: NSObject, ObservableObject {
             userDriverDelegate: self
         )
         automaticallyChecksForUpdates = controller.updater.automaticallyChecksForUpdates
+        automaticallyDownloadsUpdates = controller.updater.automaticallyDownloadsUpdates
         LoggingService.shared.log(
             .notice,
             category: .lifecycle,
-            "event=updater_started feed=\(controller.updater.feedURL?.absoluteString ?? "none") auto_checks=\(automaticallyChecksForUpdates)"
+            "event=updater_started feed=\(controller.updater.feedURL?.absoluteString ?? "none") auto_checks=\(automaticallyChecksForUpdates) auto_install=\(automaticallyDownloadsUpdates) interval_s=\(Int(controller.updater.updateCheckInterval))"
         )
     }
 
@@ -38,6 +40,11 @@ final class UpdateService: NSObject, ObservableObject {
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
         controller.updater.automaticallyChecksForUpdates = enabled
         automaticallyChecksForUpdates = enabled
+    }
+
+    func setAutomaticallyDownloadsUpdates(_ enabled: Bool) {
+        controller.updater.automaticallyDownloadsUpdates = enabled
+        automaticallyDownloadsUpdates = enabled
     }
 }
 

@@ -116,6 +116,12 @@ final class NetworkMonitorViewModel: ObservableObject {
         startDNSLoop()
     }
 
+    /// Returns false when macOS did not actually enable the login item (e.g. blocked by MDM).
+    func enableLaunchAtLogin() -> Bool {
+        settingsStore.config.launchAtLoginEnabled = true
+        return loginItemService.apply(enabled: true)
+    }
+
     func stop() {
         logging.log(.notice, category: .lifecycle, "event=monitor_stop phase=begin")
         coalesceHealthEvaluationItem?.cancel()
