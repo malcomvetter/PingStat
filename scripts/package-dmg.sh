@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
-# Build a Release PingStat.app (ad-hoc / local signing, no Developer ID) and wrap it in a .dmg
-# with a Finder-style layout (background, drag-to-Applications) via vendored create-dmg + AppleScript.
+# Wrap dist/PingStat.app in a polished .dmg (create-dmg + Finder layout when available).
 #
 # Output: dist/PingStat-<version>.dmg  (dist/ is gitignored)
 #
 # Usage: from repo root:
 #   ./scripts/package-dmg.sh
 #
+# By default runs scripts/build-release.sh first (Developer ID–signed app unless PINGSTAT_ADHOC_SIGN=1).
 # Env:
-#   PINGSTAT_DMG_REUSE_APP=/path/PingStat.app — skip xcodebuild; package this bundle (e.g. after build-release.sh).
+#   PINGSTAT_DMG_REUSE_APP=/path/PingStat.app — skip build; package this bundle (must match signing expectation).
 #   PINGSTAT_DMG_SKIP_LAYOUT=1 — pass --skip-jenkins to create-dmg (no Finder/osascript; plain window).
 #   PINGSTAT_DMG_NO_OPEN=1 — do not ``open`` the finished .dmg.
+# Signing: same as build-release (.pingstat-signing.env, PINGSTAT_ADHOC_SIGN=1 for unsigned only).
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PINGSTAT_ROOT="$ROOT"
 cd "$ROOT"
+
+# shellcheck source=lib/signing.sh
+source "$ROOT/scripts/lib/signing.sh"
+pingstat_source_signing_env
 
 mkdir -p "$ROOT/dist"
 
@@ -28,37 +34,15 @@ if [[ -n "$REUSE_APP" ]]; then
   echo "==> Reusing app bundle (PINGSTAT_DMG_REUSE_APP): $REUSE_APP"
   APP="$REUSE_APP"
 else
-  if ! command -v xcodebuild >/dev/null 2>&1; then
-    echo "xcodebuild not found. Install full Xcode and run xcode-select." >&2
-    exit 1
-  fi
+  echo "==> Building signed Release app via scripts/build-release.sh"
+  PINGSTAT_KEEP_DIST_APP=1 bash "$ROOT/scripts/build-release.sh"
+  APP="$ROOT/dist/PingStat.app"
+fi
 
-  if ! command -v xcodegen >/dev/null 2>&1; then
-    echo "xcodegen not found. Install with: brew install xcodegen" >&2
-    exit 1
-  fi
-
-  xcodegen generate >/dev/null
-
-  DERIVED="$ROOT/.build/DmgDerived"
-  rm -rf "$DERIVED"
-
-  echo "Building Release PingStat.app (ad-hoc sign, no Developer ID)…"
-  xcodebuild \
-    -project PingStat.xcodeproj \
-    -scheme PingStat \
-    -configuration Release \
-    -destination "generic/platform=macOS" \
-    -derivedDataPath "$DERIVED" \
-    CODE_SIGN_IDENTITY=- \
-    DEVELOPMENT_TEAM= \
-    build
-
-  APP="$DERIVED/Build/Products/Release/PingStat.app"
-  if [[ ! -d "$APP" ]]; then
-    echo "Expected app at: $APP" >&2
-    exit 1
-  fi
+if [[ "${PINGSTAT_ADHOC_SIGN:-}" == "1" ]]; then
+  pingstat_verify_app_signature "$APP" adhoc
+else
+  pingstat_verify_app_signature "$APP" developer-id
 fi
 
 VERSION="$(

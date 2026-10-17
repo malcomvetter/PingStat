@@ -2,32 +2,31 @@
 # Production-style Release build: sync App Icon PNGs, xcodebuild archive, copy .app, zip for distribution.
 # Usage: from repo root, `bash scripts/build-release.sh`
 #
-# Signing:
-#   PINGSTAT_ADHOC_SIGN=1 — ad-hoc only (CODE_SIGN_IDENTITY=-), no Apple Developer Program.
-#   Otherwise (default): use Xcode automatic signing if the project + machine have a valid identity.
-#   With a paid Apple Developer account, typical setups:
-#     export DEVELOPMENT_TEAM=ABCDE12345
-#     — alone: Xcode Automatic signing (usually Apple Development for Release archive; needs that cert).
-#     export PINGSTAT_DEVELOPER_ID=1  # same team, plus a "Developer ID Application" cert in your keychain
-#     — adds CODE_SIGN_IDENTITY=Developer ID Application + CODE_SIGN_STYLE=Manual for distributable builds.
-#     Or set CODE_SIGN_IDENTITY yourself (e.g. full "Developer ID Application: Name (TEAMID)").
-#   Optional: export CODE_SIGN_STYLE=Manual
-#   Tip: put exports in a gitignored file and `source` it before this script, e.g. `source ./.pingstat-signing.env`
+# Signing (default): Developer ID Application + Manual via scripts/lib/signing.sh
+#   Copy .pingstat-signing.env.example → .pingstat-signing.env and set DEVELOPMENT_TEAM (or rely on keychain auto-detect).
+#   PINGSTAT_ADHOC_SIGN=1 — ad-hoc only (unsigned distribution); skips Developer ID verification.
 #
-# Notarization (optional, after zip is built; Developer ID–signed app recommended):
-#   export PINGSTAT_NOTARIZE=1
-#   Auth (pick one):
-#     NOTARY_KEYCHAIN_PROFILE — create once (name is arbitrary but must match this var).
-#       Prefer no --password on the command line: notarytool then prompts securely (nothing sensitive in shell history):
-#         xcrun notarytool store-credentials "PingStat-notary" --apple-id "you@example.com" --team-id "34S6MQZHXC"
-#       Or read password from Keychain: --password "@keychain:ITEM_NAME"
-#       Xcode: Product → Archive → Distribute App → Developer ID → upload with notarization (full GUI; separate from this script).
-#     OR NOTARY_API_KEY_ID + NOTARY_API_ISSUER + NOTARY_API_KEY_PATH (App Store Connect API key .p8 — no Apple ID password)
-#     OR NOTARY_APPLE_ID + NOTARY_PASSWORD (app-specific password) + NOTARY_TEAM_ID or DEVELOPMENT_TEAM
-#   On success: staples ticket to dist/PingStat.app and recreates the zip so the archive matches the stapled bundle.
+# Notarization (optional): PINGSTAT_NOTARIZE=1 plus NOTARY_KEYCHAIN_PROFILE or API key / Apple ID vars (see script tail).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PINGSTAT_ROOT="$ROOT"
 cd "$ROOT"
+
+# shellcheck source=lib/signing.sh
+source "$ROOT/scripts/lib/signing.sh"
+pingstat_source_signing_env
+
+if ! command -v xcodebuild >/dev/null 2>&1; then
+  echo "error: xcodebuild not found. Install full Xcode and run xcode-select." >&2
+  exit 1
+fi
+if ! command -v xcodegen >/dev/null 2>&1; then
+  echo "error: xcodegen not found. Install with: brew install xcodegen" >&2
+  exit 1
+fi
+
+echo "==> xcodegen generate"
+xcodegen generate >/dev/null
 
 echo "==> Syncing App Icon sizes from Design/PingStat-app-icon-master.png"
 bash "$ROOT/scripts/sync-app-icons.sh"
@@ -38,35 +37,10 @@ DIST="$ROOT/dist"
 rm -rf "$DERIVED" "$ARCHIVE" "$DIST/PingStat.app"
 mkdir -p "$DIST" "$ROOT/.build"
 
-SIGN_ARGS=()
-if [[ "${PINGSTAT_ADHOC_SIGN:-}" == "1" ]]; then
-  echo "==> Ad-hoc signing (PINGSTAT_ADHOC_SIGN=1) — CODE_SIGN_IDENTITY=-"
-  SIGN_ARGS+=(CODE_SIGN_IDENTITY=-)
-else
-  if [[ -n "${DEVELOPMENT_TEAM:-}" ]]; then
-    echo "==> Signing: DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM"
-    SIGN_ARGS+=(DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM")
-  fi
-  identity="${CODE_SIGN_IDENTITY:-}"
-  if [[ "${PINGSTAT_DEVELOPER_ID:-}" == "1" && -n "${DEVELOPMENT_TEAM:-}" && -z "${identity}" ]]; then
-    identity="Developer ID Application"
-    echo "==> PINGSTAT_DEVELOPER_ID=1: CODE_SIGN_IDENTITY=$identity (requires Developer ID Application cert for team)"
-  fi
-  sign_style="${CODE_SIGN_STYLE:-}"
-  # Automatic + explicit Developer ID identity fails with "conflicting provisioning settings".
-  if [[ -n "${identity}" && "${identity}" == *"Developer ID"* ]]; then
-    if [[ -z "${sign_style}" || "${sign_style}" == "Automatic" ]]; then
-      sign_style=Manual
-      echo "==> Using CODE_SIGN_STYLE=Manual (required with Developer ID; set CODE_SIGN_STYLE to override)"
-    fi
-  fi
-  if [[ -n "${sign_style}" ]]; then
-    SIGN_ARGS+=(CODE_SIGN_STYLE="$sign_style")
-  fi
-  if [[ -n "${identity}" ]]; then
-    SIGN_ARGS+=(CODE_SIGN_IDENTITY="$identity")
-  fi
+if ! pingstat_build_xcode_sign_args; then
+  exit 1
 fi
+SIGN_ARGS=("${PINGSTAT_XCODE_SIGN_ARGS[@]}")
 
 echo "==> xcodebuild archive (Release, generic macOS)"
 xcodebuild \
@@ -86,6 +60,12 @@ if [[ ! -d "$APP_IN_ARCHIVE" ]]; then
 fi
 
 cp -R "$APP_IN_ARCHIVE" "$DIST/PingStat.app"
+
+if [[ "${PINGSTAT_ADHOC_SIGN:-}" == "1" ]]; then
+  pingstat_verify_app_signature "$DIST/PingStat.app" adhoc
+else
+  pingstat_verify_app_signature "$DIST/PingStat.app" developer-id
+fi
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$DIST/PingStat.app/Contents/Info.plist")
 BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$DIST/PingStat.app/Contents/Info.plist")
@@ -141,4 +121,13 @@ echo ""
 echo "Built: $DIST/PingStat.app"
 echo "Zip:   $ZIP"
 echo ""
-echo "GitHub: run ./scripts/release.sh from a clean tree to bump version, test, build zip + DMG, and publish a release."
+if [[ "${PINGSTAT_KEEP_DIST_APP:-}" != "1" ]]; then
+  echo "==> Removing $DIST/PingStat.app (keeps zip only; avoids duplicate Menu Bar rows on macOS 26)"
+  echo "    Set PINGSTAT_KEEP_DIST_APP=1 to leave dist/PingStat.app in place."
+  rm -rf "$DIST/PingStat.app"
+  touch "$DIST/.metadata_never_index" 2>/dev/null || true
+fi
+echo ""
+echo "Install: ditto dist/PingStat-*.zip or run scripts/reset-pingstat-install.sh"
+echo "         (only /Applications/PingStat.app should remain for daily use)"
+echo "GitHub:  ./scripts/release.sh from a clean tree to bump version, test, build zip + DMG, and publish."

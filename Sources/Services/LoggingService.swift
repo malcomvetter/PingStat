@@ -86,6 +86,10 @@ final class LoggingService {
             logger.fault("\(message, privacy: .public)")
         }
 
+        if category == .statusItem {
+            MenuBarDiagnosticLog.append(level: level, message)
+        }
+
         guard includeInRingBuffer else { return }
         let entry = LogEntry(
             id: UUID(),

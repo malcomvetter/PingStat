@@ -26,9 +26,10 @@ targets:
         CODE_SIGN_STYLE: Automatic
       configs:
         # Release must not force "Apple Development" or `xcodebuild archive` will require a Mac
-        # Development cert even when distributing with Developer ID.
+        # Development cert even when distributing with Developer ID. Debug signs to run locally so
+        # `scripts/test.sh` works without a development team.
         Debug:
-          "CODE_SIGN_IDENTITY[sdk=macosx*]": Apple Development
+          "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
         Release:
           ENABLE_HARDENED_RUNTIME: YES
     dependencies: []

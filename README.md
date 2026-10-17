@@ -30,7 +30,7 @@ PingStat is a **menu bar utility for macOS** that watches **how your network act
 ### Other behavior
 
 - Runs as an **accessory app** (no Dock icon); closing the Settings window does not quit the app.
-- **Unsigned local builds** are supported for development; release artifacts below are ad-hoc signed, not notarized.
+- **Unsigned local builds** are supported for development (`PINGSTAT_ADHOC_SIGN=1`); release scripts default to **Developer ID** signing (see below).
 
 ## Local development setup
 
@@ -74,21 +74,40 @@ If an older `MacNetStatus.xcodeproj` is still present, delete it so Xcode and `x
 
 Both `build.sh` and `test.sh` regenerate the Xcode project from `project.yml` before running so local generated files do not drift from source.
 
-## Unsigned release artifacts (no Apple Developer ID)
+## Release artifacts (Developer ID signing)
 
-Releases are built **entirely on your Mac** (no GitHub Actions build for binaries). Use **`./scripts/release.sh`** from a **clean git tree** on the branch you want to ship (usually `main`). It:
+Releases are built **entirely on your Mac** (no GitHub Actions build for binaries). You need a **paid Apple Developer Program** membership and a **Developer ID Application** certificate in your login keychain.
+
+**One-time setup:**
+
+```bash
+cp .pingstat-signing.env.example .pingstat-signing.env
+# Edit DEVELOPMENT_TEAM to match your Developer ID cert (see Keychain / Xcode → Accounts).
+```
+
+Optional: **`PINGSTAT_NOTARIZE=1`** and **`NOTARY_KEYCHAIN_PROFILE`** in that file (see comments in the example).
+
+Use **`./scripts/release.sh`** from a **clean git tree** on the branch you want to ship (usually `main`). It:
 
 1. Runs **`scripts/test.sh`** (fails the release if tests fail).
-2. Bumps **`MARKETING_VERSION`** by one **patch** (e.g. `1.0.8` → `1.0.9`) and increments **`CURRENT_PROJECT_VERSION`** in **`project.yml`**, then **`xcodegen generate`**.
-3. Runs **`PINGSTAT_ADHOC_SIGN=1 scripts/build-release.sh`** (Release archive → `dist/PingStat.app` + versioned **zip**).
-4. Runs **`scripts/package-dmg.sh`** with the same app (**create-dmg** + Finder for the polished **DMG**).
+2. Bumps **`MARKETING_VERSION`** by one **patch** and increments **`CURRENT_PROJECT_VERSION`** in **`project.yml`**, then **`xcodegen generate`**.
+3. Runs **`scripts/build-release.sh`** (Developer ID–signed **`dist/PingStat.app`** + versioned **zip**; verifies signature).
+4. Runs **`scripts/package-dmg.sh`** reusing that app (**create-dmg** + Finder for the polished **DMG**).
 5. Commits the version bump, **pushes the branch**, creates and **pushes tag `vX.Y.Z`**, and **`gh release create`** with both the zip and DMG.
 
-Prerequisites: full Xcode, **xcodegen**, Python 3, and **[GitHub CLI](https://cli.github.com/)** (`brew install gh` then **`gh auth login`**). Dry run: **`./scripts/release.sh --dry-run`**. To allow uncommitted changes (not recommended): **`PINGSTAT_RELEASE_ALLOW_DIRTY=1 ./scripts/release.sh`**.
+Prerequisites: full Xcode, **xcodegen**, Python 3, Developer ID cert, and **[GitHub CLI](https://cli.github.com/)** (`brew install gh` then **`gh auth login`**). Dry run: **`./scripts/release.sh --dry-run`**. To allow uncommitted changes (not recommended): **`PINGSTAT_RELEASE_ALLOW_DIRTY=1 ./scripts/release.sh`**.
 
-Manual pieces (without bumping): **`./scripts/build-release.sh`** with **`PINGSTAT_ADHOC_SIGN=1`** for zip only; **`./scripts/package-dmg.sh`** (or reuse **`PINGSTAT_DMG_REUSE_APP="$PWD/dist/PingStat.app"`** after a release build) for the DMG. **`dist/`** is gitignored.
+Manual build (without version bump): **`./scripts/build-release.sh`** then install with **`cp -R dist/PingStat.app /Applications/`**. Verify:
 
-These builds are **not notarized**; downloaders will need **Control-click → Open** (or **Privacy & Security → Open Anyway**) the first time.
+```bash
+codesign -dv dist/PingStat.app 2>&1 | rg 'Authority=|Signature=adhoc|TeamIdentifier='
+```
+
+DMG only: **`./scripts/package-dmg.sh`** (builds signed app first) or **`PINGSTAT_DMG_REUSE_APP="$PWD/dist/PingStat.app"`** after a release build. **`dist/`** is gitignored.
+
+For **unsigned** local artifacts only: **`PINGSTAT_ADHOC_SIGN=1 ./scripts/build-release.sh`**.
+
+Without **notarization**, Gatekeeper may still prompt on first open; enable **`PINGSTAT_NOTARIZE=1`** in **`.pingstat-signing.env`** for stapled notarized builds.
 
 ## Troubleshooting
 

@@ -11,12 +11,21 @@ final class StatusItemController: NSObject {
     private var statusBarChromeInstalled = false
     private var statusBarButtonNilRetries = 0
     private var didLogStatusBarIconDiagnostics = false
+    private var didShowMenuBarHiddenAlert = false
+    private var occlusionObserver: NSObjectProtocol?
 
     init(viewModel: NetworkMonitorViewModel) {
         self.viewModel = viewModel
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // Do not set `autosaveName`: a stale saved position (e.g. after bundle ID changes) can park the item off-screen on macOS 26.
         self.popover = NSPopover()
         super.init()
+    }
+
+    deinit {
+        if let occlusionObserver {
+            NotificationCenter.default.removeObserver(occlusionObserver)
+        }
     }
 
     func setup() {
@@ -79,9 +88,107 @@ final class StatusItemController: NSObject {
             popover.animates = true
             popover.delegate = self
             // Popover content is installed only while shown so SwiftUI is not rebuilt on every ping/DNS tick.
+
+            observeMenuBarOcclusionChanges(button: button)
+            scheduleMenuBarVisibilityChecks()
         }
 
         applyStatusBarIcon()
+        remediateMenuBarVisibility()
+    }
+
+    private func observeMenuBarOcclusionChanges(button: NSStatusBarButton) {
+        guard occlusionObserver == nil, let window = button.window else { return }
+        occlusionObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyStatusBarIcon()
+            self?.remediateMenuBarVisibility()
+        }
+    }
+
+    /// macOS 26+ can keep `NSStatusItem.isVisible == true` while the OS hides the item until allowed in System Settings → Menu Bar.
+    private func scheduleMenuBarVisibilityChecks() {
+        for delay in [0.5, 2.0, 5.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.evaluateMenuBarVisibility(allowPrompt: delay >= 2.0)
+            }
+        }
+    }
+
+    private func evaluateMenuBarVisibility(allowPrompt: Bool = true) {
+        guard let button = statusItem.button else {
+            LoggingService.shared.log(
+                .error,
+                category: .statusItem,
+                "event=status_bar_visibility_check button_missing=true"
+            )
+            return
+        }
+        let window = button.window
+        let hasWindow = window != nil
+        let forceHidden: Bool
+        if let window {
+            forceHidden = !window.occlusionState.contains(.visible)
+        } else {
+            forceHidden = true
+        }
+        let itemVisible: String
+        if #available(macOS 11.0, *) {
+            itemVisible = statusItem.isVisible ? "true" : "false"
+        } else {
+            itemVisible = "n/a"
+        }
+        let frameDesc: String
+        if let window {
+            let f = window.frame
+            frameDesc = "\(Int(f.origin.x)),\(Int(f.origin.y)),\(Int(f.width))x\(Int(f.height))"
+        } else {
+            frameDesc = "none"
+        }
+        LoggingService.shared.log(
+            forceHidden ? .error : .notice,
+            category: .statusItem,
+            "event=status_bar_visibility_check item_isVisible=\(itemVisible) has_window=\(hasWindow) force_hidden_by_os=\(forceHidden) window_frame=\(frameDesc) hint=\(forceHidden ? "open_system_settings_menu_bar" : "ok")"
+        )
+        if forceHidden {
+            remediateMenuBarVisibility()
+            if allowPrompt {
+                promptIfMenuBarHiddenByOS()
+            }
+        }
+    }
+
+    private func remediateMenuBarVisibility() {
+        if #available(macOS 11.0, *) {
+            statusItem.isVisible = true
+        }
+        applyStatusBarIcon()
+    }
+
+    private func promptIfMenuBarHiddenByOS() {
+        guard !didShowMenuBarHiddenAlert else { return }
+        didShowMenuBarHiddenAlert = true
+        let alert = NSAlert()
+        alert.messageText = "PingStat is not allowed in the menu bar"
+        alert.informativeText = """
+        macOS is hiding PingStat’s menu bar icon. Open System Settings → Menu Bar, find PingStat, and turn it on. \
+        If you do not see an icon after enabling, check the “…” overflow at the right end of the menu bar.
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Menu Bar Settings")
+        alert.addButton(withTitle: "OK")
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            Self.openSystemMenuBarSettings()
+        }
+    }
+
+    static func openSystemMenuBarSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func ensurePopoverContentInstalled() {
@@ -210,25 +317,19 @@ final class StatusItemController: NSObject {
         }
 
         let axSummary = startupMark ? "Starting up" : liveHealthState.title
-        let pointSize: CGFloat = 14
-        let baseConfig = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
-        let symbolName = HealthAppearance.statusHealthSymbolName(startupMark: startupMark, health: healthForMark)
-        let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: axSummary)
-
-        // Always template + `contentTintColor` for live tint. Palette-colored non-template symbols have
-        // been observed to draw as empty in `NSStatusBarButton` on some macOS versions while the app runs.
-        let image = base?.withSymbolConfiguration(baseConfig)
-        image?.isTemplate = true
+        let (image, imageSource, usesPalette) = menuBarMarkImage(
+            startupMark: startupMark,
+            health: healthForMark,
+            accessibilityDescription: axSummary
+        )
         button.image = image
-        if startupMark {
-            // Explicit label color: `nil` can leave a template SF Symbol effectively invisible on some menu bar / OS combinations.
-            button.contentTintColor = .labelColor
-        } else {
-            button.contentTintColor = HealthAppearance.statusHealthMarkNSColor(startupMark: false, health: healthForMark)
-        }
+        button.imagePosition = .imageOnly
+        button.contentTintColor = nil
+        button.title = image == nil ? "PS" : ""
 
         let ldm = viewModel.lowDataModePathActive ? " – Low Data Mode" : ""
         button.toolTip = "\(AppBranding.productName) - Network \(liveHealthState.title)\(ldm)"
+        button.needsDisplay = true
 
         if !didLogStatusBarIconDiagnostics {
             didLogStatusBarIconDiagnostics = true
@@ -242,12 +343,35 @@ final class StatusItemController: NSObject {
             } else {
                 vis = "n/a"
             }
+            let appearance = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])?.rawValue ?? "unknown"
             LoggingService.shared.log(
                 .notice,
                 category: .statusItem,
-                "event=status_bar_icon_applied symbol=\(symbolName) image_nil=\(img == nil) size=\(w)x\(h) isTemplate=\(tpl) is_hidden=\(button.isHidden) item_isVisible=\(vis) startup=\(startupMark)"
+                "event=status_bar_icon_applied image_source=\(imageSource) image_nil=\(img == nil) size=\(w)x\(h) isTemplate=\(tpl) uses_palette=\(usesPalette) is_hidden=\(button.isHidden) item_isVisible=\(vis) startup=\(startupMark) appearance=\(appearance)"
             )
         }
+    }
+
+    /// Startup: template symbol (system picks light/dark foreground). Live health: palette-colored symbol.
+    private func menuBarMarkImage(
+        startupMark: Bool,
+        health: NetworkHealthState,
+        accessibilityDescription: String
+    ) -> (NSImage?, String, Bool) {
+        let symbolName = HealthAppearance.statusHealthSymbolName(startupMark: startupMark, health: health)
+        let baseConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        guard let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription) else {
+            return (nil, "none", false)
+        }
+        if startupMark {
+            let image = base.withSymbolConfiguration(baseConfig)
+            image?.isTemplate = true
+            return (image, "sf_template:\(symbolName)", false)
+        }
+        let color = HealthAppearance.statusHealthMarkNSColor(startupMark: false, health: health)
+        let image = base.withSymbolConfiguration(baseConfig.applying(NSImage.SymbolConfiguration(paletteColors: [color])))
+        image?.isTemplate = false
+        return (image, "sf_palette:\(symbolName)", true)
     }
 
     private func addDNSStatusItems(to menu: NSMenu) {

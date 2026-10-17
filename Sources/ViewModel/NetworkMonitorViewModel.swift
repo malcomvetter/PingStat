@@ -145,6 +145,10 @@ final class NetworkMonitorViewModel: ObservableObject {
         notificationService.openSystemNotificationsSettings()
     }
 
+    func openSystemMenuBarSettings() {
+        StatusItemController.openSystemMenuBarSettings()
+    }
+
     func requestNotificationPermissionFromSettings() async {
         _ = await notificationService.requestAuthorizationFromUserPrompt()
         await refreshNotificationBannerHelp()

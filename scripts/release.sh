@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Full local release: require clean git tree, run tests, bump patch version + build number in
-# project.yml, regenerate Xcode project, build ad-hoc zip + polished DMG, commit, push branch,
-# push tag, and create a GitHub Release with both artifacts.
+# project.yml, regenerate Xcode project, build Developer ID–signed zip + polished DMG, commit,
+# push branch, push tag, and create a GitHub Release with both artifacts.
+#
+# Signing: copy .pingstat-signing.env.example → .pingstat-signing.env (DEVELOPMENT_TEAM, optional
+# PINGSTAT_NOTARIZE / NOTARY_KEYCHAIN_PROFILE). Uses scripts/lib/signing.sh (not ad-hoc unless
+# PINGSTAT_ADHOC_SIGN=1).
 #
 # Prerequisites: full Xcode, xcodegen, Python 3, GitHub CLI (`brew install gh` && `gh auth login`).
 #
@@ -15,7 +19,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PINGSTAT_ROOT="$ROOT"
 cd "$ROOT"
+
+# shellcheck source=lib/signing.sh
+source "$ROOT/scripts/lib/signing.sh"
+pingstat_source_signing_env
 
 DRY_RUN=0
 if [[ "${1:-}" == "--dry-run" ]]; then
@@ -139,14 +148,14 @@ fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   TAG="v${NEW_MARKETING}"
-  echo "[dry-run] would run: PINGSTAT_ADHOC_SIGN=1 bash scripts/build-release.sh"
+  echo "[dry-run] would run: bash scripts/build-release.sh (Developer ID; see .pingstat-signing.env)"
   echo "[dry-run] would run: PINGSTAT_DMG_REUSE_APP=... PINGSTAT_DMG_NO_OPEN=1 bash scripts/package-dmg.sh"
   echo "[dry-run] would commit, push $BRANCH, tag $TAG, gh release create with zip + dmg"
   exit 0
 fi
 
-echo "==> Building release zip (ad-hoc archive)"
-PINGSTAT_ADHOC_SIGN=1 bash "$ROOT/scripts/build-release.sh"
+echo "==> Building release zip (Developer ID archive)"
+PINGSTAT_KEEP_DIST_APP=1 bash "$ROOT/scripts/build-release.sh"
 
 VERSION="$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$ROOT/dist/PingStat.app/Contents/Info.plist" | tr -d '\n')"
 BUILD="$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$ROOT/dist/PingStat.app/Contents/Info.plist" | tr -d '\n')"
@@ -163,6 +172,8 @@ export PINGSTAT_DMG_NO_OPEN=1
 export PINGSTAT_DMG_REUSE_APP="$ROOT/dist/PingStat.app"
 bash "$ROOT/scripts/package-dmg.sh"
 [[ -f "$DMG" ]] || die "missing dmg after package-dmg: $DMG"
+# A second registered copy shows up as a duplicate row in System Settings → Menu Bar (macOS 26).
+rm -rf "$ROOT/dist/PingStat.app"
 
 trap - ERR
 

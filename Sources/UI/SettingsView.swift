@@ -16,6 +16,18 @@ struct SettingsView: View {
                         Toggle("Launch at Login", isOn: binding(\.launchAtLoginEnabled))
                     }
 
+                    Section("Menu Bar") {
+                        Text(
+                            "On macOS 26+, allow PingStat under System Settings → Menu Bar. Two “PingStat” rows usually mean two bundle IDs still registered (org.malcomvetter.PingStat and old com.example.PingStat from early DMG/dev builds). Turn on org.malcomvetter.PingStat; run scripts/prune-launch-services-pingstat.sh from the repo to clear ghosts."
+                        )
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        Button("Open Menu Bar Settings…") {
+                            viewModel.openSystemMenuBarSettings()
+                        }
+                    }
+
                     Section {
                         Toggle("Enable Debug Logging", isOn: binding(\.debugLoggingEnabled))
                     }

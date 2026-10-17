@@ -22,6 +22,7 @@
 		58E5D71759BC7E866330FDDE /* AppResilience.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A67E32634D11BE0DA0201E /* AppResilience.swift */; };
 		7495C1A251433E7B0CBFCF92 /* LoginItemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */; };
 		7AEA30CF82A9255E10186471 /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087999CA710AC77A26F95E9B /* LoggingService.swift */; };
+		864BA5EFD6AEFA672F46064F /* MenuBarDiagnosticLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E2CB7A1068E1636ACF4115 /* MenuBarDiagnosticLog.swift */; };
 		8DB85849D87BE22B68E3E1DF /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F6F1CFFDDC4F3E9E6663C87 /* NotificationService.swift */; };
 		9064A7E1CE53A7F7E840537D /* HealthEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E59F66FFF5BA3D245D93E2 /* HealthEvaluator.swift */; };
 		A3DC855F3FA93B9A72B141F0 /* StatusPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479FE9B23D7273D786A96087 /* StatusPopoverView.swift */; };
@@ -56,6 +57,7 @@
 		087999CA710AC77A26F95E9B /* LoggingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingService.swift; sourceTree = "<group>"; };
 		10A67E32634D11BE0DA0201E /* AppResilience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppResilience.swift; sourceTree = "<group>"; };
 		1AB7191F31285389A822CB4C /* PingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingService.swift; sourceTree = "<group>"; };
+		25E2CB7A1068E1636ACF4115 /* MenuBarDiagnosticLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarDiagnosticLog.swift; sourceTree = "<group>"; };
 		2AB8B91345867389E5154295 /* NativeNetworkConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeNetworkConfiguration.swift; sourceTree = "<group>"; };
 		308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemService.swift; sourceTree = "<group>"; };
 		37E59F66FFF5BA3D245D93E2 /* HealthEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthEvaluator.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 				BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */,
 				74D5E7E1250837BE6A66018C /* ICMPPing.swift */,
 				54DBDF9997E7AAA5B73DFFC1 /* LowDataModeProbeEligibility.swift */,
+				25E2CB7A1068E1636ACF4115 /* MenuBarDiagnosticLog.swift */,
 				2AB8B91345867389E5154295 /* NativeNetworkConfiguration.swift */,
 				43B605F9D5B139919A4DA1D4 /* SystemDNSConfiguration.swift */,
 				B9EED0A4C89829E8A807561C /* VpnNetworkExtensionDisplayName.swift */,
@@ -305,6 +308,7 @@
 				7AEA30CF82A9255E10186471 /* LoggingService.swift in Sources */,
 				7495C1A251433E7B0CBFCF92 /* LoginItemService.swift in Sources */,
 				FA408948EB15A39D1A754CDC /* LowDataModeProbeEligibility.swift in Sources */,
+				864BA5EFD6AEFA672F46064F /* MenuBarDiagnosticLog.swift in Sources */,
 				044D90305D7DAF9688969374 /* NativeNetworkConfiguration.swift in Sources */,
 				4D49E6B5943F2ECA2513AB0F /* NetworkContextService.swift in Sources */,
 				E430ABC98D168E41C260C420 /* NetworkModels.swift in Sources */,
@@ -346,7 +350,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 10;
