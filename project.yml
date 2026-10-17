@@ -6,6 +6,10 @@ settings:
     SWIFT_VERSION: 5.10
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     GENERATE_INFOPLIST_FILE: YES
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
 targets:
   PingStat:
     type: application
@@ -13,6 +17,15 @@ targets:
     sources:
       - path: Sources
       - path: Assets.xcassets
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        SUFeedURL: https://raw.githubusercontent.com/malcomvetter/PingStat/main/appcast.xml
+        SUPublicEDKey: 4Zd0euzFpNS/3q8NqPsgEu1ziOkrGd0gLIEViD9aMqo=
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.malcomvetter.PingStat
@@ -32,7 +45,8 @@ targets:
           "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
         Release:
           ENABLE_HARDENED_RUNTIME: YES
-    dependencies: []
+    dependencies:
+      - package: Sparkle
   PingStatTests:
     type: bundle.unit-test
     platform: macOS

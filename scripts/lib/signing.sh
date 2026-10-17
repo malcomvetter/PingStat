@@ -92,6 +92,40 @@ pingstat_build_xcode_sign_args() {
   fi
 }
 
+# Full "Developer ID Application: … (TEAM)" identity name for DEVELOPMENT_TEAM (codesign -s needs it unambiguous).
+pingstat_developer_id_identity() {
+  security find-identity -v -p codesigning 2>/dev/null \
+    | sed -n "s/.*\"\(Developer ID Application:.*(${DEVELOPMENT_TEAM})\)\".*/\1/p" \
+    | head -1
+}
+
+# `xcodebuild archive` re-signs Sparkle.framework but not the helpers inside it; Sparkle's installer
+# runs those helpers, and notarization rejects them unless they carry our Developer ID + hardened runtime.
+pingstat_resign_sparkle() {
+  local app=$1
+  local fw="$app/Contents/Frameworks/Sparkle.framework"
+  [[ -d "$fw" ]] || return 0
+  [[ "${PINGSTAT_ADHOC_SIGN:-}" == "1" ]] && return 0
+
+  local identity
+  identity="$(pingstat_developer_id_identity)"
+  if [[ -z "$identity" ]]; then
+    echo "error: no Developer ID Application identity for team ${DEVELOPMENT_TEAM:-?} in keychain" >&2
+    return 1
+  fi
+
+  echo "==> Re-signing Sparkle helpers with: $identity"
+  local v="$fw/Versions/B"
+  local opts=(--force --timestamp --options runtime --sign "$identity")
+  [[ -d "$v/XPCServices/Installer.xpc" ]] && codesign "${opts[@]}" "$v/XPCServices/Installer.xpc"
+  [[ -d "$v/XPCServices/Downloader.xpc" ]] && codesign "${opts[@]}" --preserve-metadata=entitlements "$v/XPCServices/Downloader.xpc"
+  codesign "${opts[@]}" "$v/Autoupdate"
+  codesign "${opts[@]}" "$v/Updater.app"
+  codesign "${opts[@]}" "$fw"
+  codesign "${opts[@]}" --preserve-metadata=entitlements,requirements,flags "$app"
+  codesign --verify --deep --strict "$app"
+}
+
 # Verify codesign output for dist/PingStat.app. Mode: developer-id | adhoc
 pingstat_verify_app_signature() {
   local app=$1

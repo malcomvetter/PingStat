@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Full local release: require clean git tree, run tests, bump patch version + build number in
-# project.yml, regenerate Xcode project, build Developer ID–signed zip + polished DMG, commit,
-# push branch, push tag, and create a GitHub Release with both artifacts.
+# project.yml, regenerate Xcode project, build Developer ID–signed zip + polished DMG, sign the zip
+# for Sparkle and prepend it to appcast.xml, commit, push tag, create a GitHub Release with both
+# artifacts, then push the branch (which publishes the feed to installed apps).
+#
+# Sparkle: the EdDSA private key lives in the login keychain (Sparkle's generate_keys, run once);
+# its public half is SUPublicEDKey in project.yml.
 #
 # Signing: copy .pingstat-signing.env.example → .pingstat-signing.env (DEVELOPMENT_TEAM, optional
 # PINGSTAT_NOTARIZE / NOTARY_KEYCHAIN_PROFILE). Uses scripts/lib/signing.sh (not ad-hoc unless
@@ -67,7 +71,7 @@ else
 fi
 
 restore_version_files() {
-  git checkout -- project.yml PingStat.xcodeproj/project.pbxproj 2>/dev/null || true
+  git checkout -- project.yml PingStat.xcodeproj/project.pbxproj appcast.xml 2>/dev/null || true
   xcodegen generate >/dev/null 2>&1 || true
 }
 
@@ -150,7 +154,8 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   TAG="v${NEW_MARKETING}"
   echo "[dry-run] would run: bash scripts/build-release.sh (Developer ID; see .pingstat-signing.env)"
   echo "[dry-run] would run: PINGSTAT_DMG_REUSE_APP=... PINGSTAT_DMG_NO_OPEN=1 bash scripts/package-dmg.sh"
-  echo "[dry-run] would commit, push $BRANCH, tag $TAG, gh release create with zip + dmg"
+  echo "[dry-run] would sign zip with Sparkle sign_update and prepend an item to appcast.xml"
+  echo "[dry-run] would commit, tag $TAG, push tag, gh release create with zip + dmg, then push $BRANCH"
   exit 0
 fi
 
@@ -175,25 +180,34 @@ bash "$ROOT/scripts/package-dmg.sh"
 # A second registered copy shows up as a duplicate row in System Settings → Menu Bar (macOS 26).
 rm -rf "$ROOT/dist/PingStat.app"
 
+TAG="v${VERSION}"
+
+echo "==> Signing zip for Sparkle and updating appcast.xml"
+SIGN_UPDATE="$(find "$ROOT/.build/ReleaseDerivedData/SourcePackages/artifacts" -path '*/Sparkle/bin/sign_update' -type f 2>/dev/null | head -1)"
+[[ -x "$SIGN_UPDATE" ]] || die "Sparkle sign_update not found under .build/ReleaseDerivedData (package not resolved?)"
+# Uses the EdDSA private key in the login keychain (created once with Sparkle's generate_keys).
+SIGNED="$("$SIGN_UPDATE" "$ZIP")"
+REPO_URL="$(gh repo view --json url -q .url)"
+python3 "$ROOT/scripts/update-appcast.py" "$ROOT/appcast.xml" "$VERSION" "$BUILD" \
+  "${REPO_URL}/releases/download/${TAG}/$(basename "$ZIP")" "$SIGNED"
+
 trap - ERR
 
-TAG="v${VERSION}"
 if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
-  echo "error: remote already has tag ${TAG}; restoring project.yml / pbxproj" >&2
+  echo "error: remote already has tag ${TAG}; restoring project.yml / pbxproj / appcast.xml" >&2
   restore_version_files
   die "remove the tag and GitHub release on origin first, or adjust project.yml"
 fi
 
-echo "==> Committing version bump"
-git add project.yml PingStat.xcodeproj/project.pbxproj
+echo "==> Committing version bump + appcast"
+git add project.yml PingStat.xcodeproj/project.pbxproj appcast.xml
 git commit -m "chore(release): ${VERSION} (build ${BUILD})"
 
-echo "==> Pushing branch $BRANCH and tag $TAG"
-git push origin "$BRANCH"
 if git rev-parse "$TAG" >/dev/null 2>&1; then
   die "tag $TAG already exists locally — delete it before retrying"
 fi
 git tag -a "$TAG" -m "PingStat ${VERSION} (build ${BUILD})"
+echo "==> Pushing tag $TAG"
 git push origin "$TAG"
 
 echo "==> Creating GitHub Release $TAG with zip + DMG"
@@ -203,5 +217,9 @@ gh release create "$TAG" \
   --title "PingStat ${VERSION}" \
   --generate-notes
 
+# Push the branch last: the feed on main must not point at a release asset that does not exist yet.
+echo "==> Pushing branch $BRANCH (publishes appcast.xml to updaters)"
+git push origin "$BRANCH"
+
 echo ""
-echo "Done. Release: $(gh repo view --json url -q .url)/releases/tag/${TAG}"
+echo "Done. Release: ${REPO_URL}/releases/tag/${TAG}"

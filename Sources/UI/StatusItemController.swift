@@ -222,6 +222,15 @@ final class StatusItemController: NSObject {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let updatesItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        updatesItem.target = self
+        updatesItem.isEnabled = UpdateService.shared.canCheckForUpdates
+        menu.addItem(updatesItem)
+
         let exportDebugItem = NSMenuItem(
             title: "Export Debug…",
             action: #selector(exportDebug),
@@ -257,6 +266,11 @@ final class StatusItemController: NSObject {
     @objc
     private func openSettings() {
         SettingsWindowController.shared.show(viewModel: viewModel)
+    }
+
+    @objc
+    private func checkForUpdates() {
+        UpdateService.shared.checkForUpdates()
     }
 
     @objc

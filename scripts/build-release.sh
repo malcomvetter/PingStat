@@ -60,6 +60,7 @@ if [[ ! -d "$APP_IN_ARCHIVE" ]]; then
 fi
 
 cp -R "$APP_IN_ARCHIVE" "$DIST/PingStat.app"
+pingstat_resign_sparkle "$DIST/PingStat.app"
 
 if [[ "${PINGSTAT_ADHOC_SIGN:-}" == "1" ]]; then
   pingstat_verify_app_signature "$DIST/PingStat.app" adhoc

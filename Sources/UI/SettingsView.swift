@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var viewModel: NetworkMonitorViewModel
+    @ObservedObject private var updates = UpdateService.shared
     @State private var expandedWanTargets: Set<String> = []
 
     var body: some View {
@@ -14,6 +15,20 @@ struct SettingsView: View {
                 Form {
                     Section {
                         Toggle("Launch at Login", isOn: binding(\.launchAtLoginEnabled))
+                    }
+
+                    Section("Updates") {
+                        Toggle(
+                            "Automatically check for updates",
+                            isOn: Binding(
+                                get: { updates.automaticallyChecksForUpdates },
+                                set: { updates.setAutomaticallyChecksForUpdates($0) }
+                            )
+                        )
+                        LabeledContent("Installed version", value: AppVersion.marketingAndBuild)
+                        Button("Check for Updates…") {
+                            updates.checkForUpdates()
+                        }
                     }
 
                     Section("Menu Bar") {

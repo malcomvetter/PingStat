@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = NSApp.setActivationPolicy(.accessory)
 
         LoggingService.shared.log(.notice, category: .lifecycle, AppVersion.lifecycleLaunchLogLine)
+        _ = UpdateService.shared
 
         let viewModel = NetworkMonitorViewModel(settingsStore: SettingsStore())
         self.viewModel = viewModel

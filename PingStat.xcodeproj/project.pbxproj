@@ -19,6 +19,7 @@
 		425165A5B89B1D5390F65E6B /* DNSProbeDetailLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4709593D8E9A4EE8461B3516 /* DNSProbeDetailLine.swift */; };
 		45EEC788693127CBB984774C /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECF8C65BB3FD743DF2057DBF /* StatusItemController.swift */; };
 		4D49E6B5943F2ECA2513AB0F /* NetworkContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE9821CF1ADB08D747D80A8 /* NetworkContextService.swift */; };
+		51B15E26D27D791547F6D5DC /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 82580186E3717BC9E2402F3E /* Sparkle */; };
 		58E5D71759BC7E866330FDDE /* AppResilience.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A67E32634D11BE0DA0201E /* AppResilience.swift */; };
 		7495C1A251433E7B0CBFCF92 /* LoginItemService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 308AAD0F54EC6C87FC8C0842 /* LoginItemService.swift */; };
 		7AEA30CF82A9255E10186471 /* LoggingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087999CA710AC77A26F95E9B /* LoggingService.swift */; };
@@ -30,6 +31,7 @@
 		ADAB9B85F49BADE550D1EDF1 /* DebugExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4733B571641CE69A059B04A8 /* DebugExportService.swift */; };
 		AEFD8E1ECADEF2980DD9AD2C /* ICMPPing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74D5E7E1250837BE6A66018C /* ICMPPing.swift */; };
 		B5B32EE8F5DCACD1BD719048 /* DNSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70073510CB9A14E301BA63F9 /* DNSService.swift */; };
+		BC5431272F5A6F5D3A18F4D2 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF29E5BFAB807B9E3E103412 /* UpdateService.swift */; };
 		CFB8710E19EF01B583B3F8C4 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0444896208B2068A335E7171 /* SettingsStore.swift */; };
 		CFB9615B5E7855B8B1AF1DB2 /* VpnNetworkExtensionDisplayName.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9EED0A4C89829E8A807561C /* VpnNetworkExtensionDisplayName.swift */; };
 		D1C40ECFBE4D1A2253B0F744 /* PingStatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF7FCE5FA1D79892C3442C57 /* PingStatApp.swift */; };
@@ -78,6 +80,8 @@
 		8D01FB0B5327F3F176F3F19E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		977DCB59E911BDE414C16FDD /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		A1659AE96406BFC6A44FFA3D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A339CDB903BC48BCA0A52B9B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		AF29E5BFAB807B9E3E103412 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		B9EED0A4C89829E8A807561C /* VpnNetworkExtensionDisplayName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VpnNetworkExtensionDisplayName.swift; sourceTree = "<group>"; };
 		BA0AA22464D2466283E6B62B /* ConnectivityProbePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityProbePolicy.swift; sourceTree = "<group>"; };
 		BDAA294B12E4B203A7B2C95A /* DNSUDPQuery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSUDPQuery.swift; sourceTree = "<group>"; };
@@ -89,6 +93,17 @@
 		EF7FCE5FA1D79892C3442C57 /* PingStatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingStatApp.swift; sourceTree = "<group>"; };
 		FBE9821CF1ADB08D747D80A8 /* NetworkContextService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkContextService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		528114A6F2E18C6CADCA0974 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				51B15E26D27D791547F6D5DC /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		0D0054A322DCEB2ABB289DFF /* App */ = {
@@ -112,6 +127,7 @@
 		5A04189EB5D11A1F27BCB08F /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				A339CDB903BC48BCA0A52B9B /* Info.plist */,
 				0D0054A322DCEB2ABB289DFF /* App */,
 				5CEF2EB33288EF608CD2BD74 /* Model */,
 				D6D8CC1D128866CFB7912098 /* Services */,
@@ -192,6 +208,7 @@
 				3F6F1CFFDDC4F3E9E6663C87 /* NotificationService.swift */,
 				1AB7191F31285389A822CB4C /* PingService.swift */,
 				0444896208B2068A335E7171 /* SettingsStore.swift */,
+				AF29E5BFAB807B9E3E103412 /* UpdateService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -231,6 +248,7 @@
 			buildPhases = (
 				6E23128D17E91F6340ED7D3F /* Sources */,
 				A4FC8C77B7D51EEE12F574D7 /* Resources */,
+				528114A6F2E18C6CADCA0974 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -238,6 +256,7 @@
 			);
 			name = PingStat;
 			packageProductDependencies = (
+				82580186E3717BC9E2402F3E /* Sparkle */,
 			);
 			productName = PingStat;
 			productReference = 796AA9EB01C60F878051F32A /* PingStat.app */;
@@ -266,6 +285,9 @@
 			);
 			mainGroup = 5BCC50E95F372BB9BC0BDD76;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				005B65A83FA3210F1EDB3223 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 30BB3C462B411A4DF27CEA0D /* Products */;
 			projectDirPath = "";
@@ -322,6 +344,7 @@
 				45EEC788693127CBB984774C /* StatusItemController.swift in Sources */,
 				A3DC855F3FA93B9A72B141F0 /* StatusPopoverView.swift in Sources */,
 				DC6E9E4D189DEA67BFDEB03F /* SystemDNSConfiguration.swift in Sources */,
+				BC5431272F5A6F5D3A18F4D2 /* UpdateService.swift in Sources */,
 				DB24068A3A303EAA2D310B8D /* VPNPathEvaluator.swift in Sources */,
 				CFB9615B5E7855B8B1AF1DB2 /* VpnNetworkExtensionDisplayName.swift in Sources */,
 			);
@@ -354,6 +377,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 10;
+				INFOPLIST_FILE = Sources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -458,6 +482,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 10;
 				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PingStat;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -578,6 +603,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		005B65A83FA3210F1EDB3223 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		82580186E3717BC9E2402F3E /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 005B65A83FA3210F1EDB3223 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 416582A41CCA3A441331CD26 /* Project object */;
 }

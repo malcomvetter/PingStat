@@ -25,7 +25,7 @@ PingStat is a **menu bar utility for macOS** that watches **how your network act
 ### Notifications and settings
 
 - **User notifications** can fire on meaningful transitions (for example **offline / degraded** and **DNS filtering / resolver** style conditions), with a configurable **cooldown** so you are not spammed. Settings includes links and copy for **notification permission** issues on macOS.
-- **Settings** also covers **Launch at login**, **debug logging**, **ping / DNS intervals and timeouts**, **DNS probe hostname** (default geared toward captive-network detection), **latency thresholds** (blazing / healthy / degraded), and **precision** controls (how many agreeing probe rounds and minimum seconds between state changes) to reduce flapping.
+- **Settings** also covers **automatic updates** (Sparkle), **Launch at login**, **debug logging**, **ping / DNS intervals and timeouts**, **DNS probe hostname** (default geared toward captive-network detection), **latency thresholds** (blazing / healthy / degraded), and **precision** controls (how many agreeing probe rounds and minimum seconds between state changes) to reduce flapping.
 
 ### Other behavior
 
@@ -93,14 +93,16 @@ Use **`./scripts/release.sh`** from a **clean git tree** on the branch you want 
 2. Bumps **`MARKETING_VERSION`** by one **patch** and increments **`CURRENT_PROJECT_VERSION`** in **`project.yml`**, then **`xcodegen generate`**.
 3. Runs **`scripts/build-release.sh`** (Developer ID–signed **`dist/PingStat.app`** + versioned **zip**; verifies signature).
 4. Runs **`scripts/package-dmg.sh`** reusing that app (**create-dmg** + Finder for the polished **DMG**).
-5. Commits the version bump, **pushes the branch**, creates and **pushes tag `vX.Y.Z`**, and **`gh release create`** with both the zip and DMG.
+5. Signs the zip with Sparkle's **`sign_update`** and prepends an entry to **`appcast.xml`**.
+6. Commits the version bump + appcast, creates and **pushes tag `vX.Y.Z`**, runs **`gh release create`** with both the zip and DMG, then **pushes the branch** last so the feed never points at a missing asset.
 
 Prerequisites: full Xcode, **xcodegen**, Python 3, Developer ID cert, and **[GitHub CLI](https://cli.github.com/)** (`brew install gh` then **`gh auth login`**). Dry run: **`./scripts/release.sh --dry-run`**. To allow uncommitted changes (not recommended): **`PINGSTAT_RELEASE_ALLOW_DIRTY=1 ./scripts/release.sh`**.
 
-Manual build (without version bump): **`./scripts/build-release.sh`** then install with **`cp -R dist/PingStat.app /Applications/`**. Verify:
+Manual build (without version bump): **`./scripts/build-release.sh`** (leaves only the zip in `dist/`; set **`PINGSTAT_KEEP_DIST_APP=1`** to keep the `.app`). Install and verify:
 
 ```bash
-codesign -dv dist/PingStat.app 2>&1 | rg 'Authority=|Signature=adhoc|TeamIdentifier='
+ditto -x -k dist/PingStat-*.zip /Applications
+codesign -dv /Applications/PingStat.app 2>&1 | rg 'Authority=|Signature=adhoc|TeamIdentifier='
 ```
 
 DMG only: **`./scripts/package-dmg.sh`** (builds signed app first) or **`PINGSTAT_DMG_REUSE_APP="$PWD/dist/PingStat.app"`** after a release build. **`dist/`** is gitignored.
@@ -108,6 +110,14 @@ DMG only: **`./scripts/package-dmg.sh`** (builds signed app first) or **`PINGSTA
 For **unsigned** local artifacts only: **`PINGSTAT_ADHOC_SIGN=1 ./scripts/build-release.sh`**.
 
 Without **notarization**, Gatekeeper may still prompt on first open; enable **`PINGSTAT_NOTARIZE=1`** in **`.pingstat-signing.env`** for stapled notarized builds.
+
+### Automatic updates (Sparkle)
+
+PingStat uses **[Sparkle 2](https://sparkle-project.org)**. Installed apps read **`appcast.xml`** from `main` (`SUFeedURL` in `project.yml`), check daily by default, and download the zip attached to the GitHub Release. Each zip is verified against **`SUPublicEDKey`** (and the Developer ID signature) before it replaces `/Applications/PingStat.app`.
+
+- Users: right-click the menu bar icon → **Check for Updates…**, or **Settings → Updates**.
+- Signing key: the EdDSA private key is in the **login keychain** of the release Mac (created once with `generate_keys` from `.build/*/SourcePackages/artifacts/sparkle/Sparkle/bin/`). Back it up with `generate_keys -x private-key-file`; without it, shipped apps cannot accept new updates.
+- Builds before the first Sparkle release must be updated by hand once.
 
 ## Troubleshooting
 
