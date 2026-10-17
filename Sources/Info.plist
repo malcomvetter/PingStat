@@ -20,11 +20,17 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>SUEnableJavaScript</key>
+	<false/>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/malcomvetter/PingStat/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>4Zd0euzFpNS/3q8NqPsgEu1ziOkrGd0gLIEViD9aMqo=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

@@ -9,7 +9,8 @@ settings:
 packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    from: "2.6.0"
+    # 2.9.6+ fixes GHSA-3x7w-j75x-ppq5 / GHSA-4v99-qgq9-6pxp (installer path and symlink issues).
+    from: "2.10.0"
 targets:
   PingStat:
     type: application
@@ -25,6 +26,9 @@ targets:
         SUFeedURL: https://raw.githubusercontent.com/malcomvetter/PingStat/main/appcast.xml
         SUPublicEDKey: 4Zd0euzFpNS/3q8NqPsgEu1ziOkrGd0gLIEViD9aMqo=
         SUEnableAutomaticChecks: true
+        SURequireSignedFeed: true
+        SUVerifyUpdateBeforeExtraction: true
+        SUEnableJavaScript: false
         SUScheduledCheckInterval: 86400
     settings:
       base:

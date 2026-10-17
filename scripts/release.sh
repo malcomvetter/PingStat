@@ -190,6 +190,8 @@ SIGNED="$("$SIGN_UPDATE" "$ZIP")"
 REPO_URL="$(gh repo view --json url -q .url)"
 python3 "$ROOT/scripts/update-appcast.py" "$ROOT/appcast.xml" "$VERSION" "$BUILD" \
   "${REPO_URL}/releases/download/${TAG}/$(basename "$ZIP")" "$SIGNED"
+# Apps require a signed feed (SURequireSignedFeed); this embeds the EdDSA signature in appcast.xml.
+"$SIGN_UPDATE" "$ROOT/appcast.xml"
 
 trap - ERR
 
