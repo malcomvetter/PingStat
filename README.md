@@ -119,6 +119,12 @@ PingStat uses **[Sparkle 2](https://sparkle-project.org)**. Installed apps read 
 - Signing key: the EdDSA private key is in the **login keychain** of the release Mac (created once with `generate_keys` from `.build/*/SourcePackages/artifacts/sparkle/Sparkle/bin/`). Back it up with `generate_keys -x private-key-file`; without it, shipped apps cannot accept new updates.
 - Builds before the first Sparkle release must be updated by hand once.
 
+## License
+
+PingStat is released under the [MIT License](LICENSE).
+
+Third-party components (both MIT): [Sparkle](https://github.com/sparkle-project/Sparkle/blob/2.x/LICENSE) is embedded in the app for updates; [create-dmg](scripts/third_party/create-dmg/LICENSE-create-dmg) is used only to build the DMG.
+
 ## Troubleshooting
 
 If you see `Build input file cannot be found ... AppContainer.swift` (or similar missing source file errors), your local generated project is stale. Regenerate:
