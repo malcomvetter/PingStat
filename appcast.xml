@@ -7,6 +7,15 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>PingStat updates</description>
     <language>en</language>
     <item>
+      <title>PingStat 1.0.2</title>
+      <link>https://github.com/malcomvetter/PingStat/releases/tag/v1.0.2</link>
+      <pubDate>Sat, 17 Oct 2026 04:08:33 GMT</pubDate>
+      <sparkle:version>3</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/malcomvetter/PingStat/releases/download/v1.0.2/PingStat-1.0.2-3.zip" sparkle:edSignature="iBN3voBJNSCDjGo4WOb0+bMC+sISkT7fuTI+nHW4LfdKy9T+fYi8vFPNtYhucQvx7iTObxO3AIcmHu+wLWC7DA==" length="1801124" type="application/octet-stream"/>
+    </item>
+    <item>
       <title>PingStat 1.0.1</title>
       <link>https://github.com/malcomvetter/PingStat/releases/tag/v1.0.1</link>
       <pubDate>Sat, 17 Oct 2026 03:35:39 GMT</pubDate>
@@ -26,6 +35,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: gahkHN3C/1Ae3swLR+YqCzkXvW7WLb9uBhgUisjaw1zyfHXDYBuHkcEn8wl9RXHMP6ybb2wE43jj9OcBbIzuAw==
-length: 1872
+edSignature: Iqlgjk7n34LPvw5gj+J192NhKuR4996hpJZil8aN+UB8UAkAnHeTfDOFKxbOHxdVmO6VQqCHacVlj7jiyKAhCg==
+length: 2522
 -->
