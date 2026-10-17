@@ -81,25 +81,8 @@ if [[ "${PINGSTAT_NOTARIZE:-}" == "1" ]]; then
     exit 1
   fi
   echo "==> Notarization: submitting $ZIP (notarytool --wait)"
-  NOTARY_CMD=(xcrun notarytool submit "$ZIP" --wait)
-  if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
-    NOTARY_CMD+=(--keychain-profile "$NOTARY_KEYCHAIN_PROFILE")
-  elif [[ -n "${NOTARY_API_KEY_ID:-}" && -n "${NOTARY_API_ISSUER:-}" && -n "${NOTARY_API_KEY_PATH:-}" ]]; then
-    NOTARY_CMD+=(--key "$NOTARY_API_KEY_PATH" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER")
-  elif [[ -n "${NOTARY_APPLE_ID:-}" && -n "${NOTARY_PASSWORD:-}" ]]; then
-    NOTARY_TEAM="${NOTARY_TEAM_ID:-${DEVELOPMENT_TEAM:-}}"
-    if [[ -z "${NOTARY_TEAM}" ]]; then
-      echo "error: PINGSTAT_NOTARIZE=1 with apple-id auth needs NOTARY_TEAM_ID or DEVELOPMENT_TEAM" >&2
-      exit 1
-    fi
-    NOTARY_CMD+=(--apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_PASSWORD" --team-id "$NOTARY_TEAM")
-  else
-    echo "error: PINGSTAT_NOTARIZE=1 needs one of:" >&2
-    echo "  NOTARY_KEYCHAIN_PROFILE, or" >&2
-    echo "  NOTARY_API_KEY_ID + NOTARY_API_ISSUER + NOTARY_API_KEY_PATH, or" >&2
-    echo "  NOTARY_APPLE_ID + NOTARY_PASSWORD (+ NOTARY_TEAM_ID or DEVELOPMENT_TEAM)" >&2
-    exit 1
-  fi
+  pingstat_notary_auth_args || exit 1
+  NOTARY_CMD=(xcrun notarytool submit "$ZIP" --wait "${PINGSTAT_NOTARY_AUTH_ARGS[@]}")
   if ! "${NOTARY_CMD[@]}"; then
     ec=$?
     if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then

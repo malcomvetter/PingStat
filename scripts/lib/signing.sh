@@ -126,6 +126,54 @@ pingstat_resign_sparkle() {
   codesign --verify --deep --strict "$app"
 }
 
+# Populates global PINGSTAT_NOTARY_AUTH_ARGS for `xcrun notarytool` from env (bash 3.2–safe).
+pingstat_notary_auth_args() {
+  PINGSTAT_NOTARY_AUTH_ARGS=()
+  if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
+    PINGSTAT_NOTARY_AUTH_ARGS=(--keychain-profile "$NOTARY_KEYCHAIN_PROFILE")
+  elif [[ -n "${NOTARY_API_KEY_ID:-}" && -n "${NOTARY_API_ISSUER:-}" && -n "${NOTARY_API_KEY_PATH:-}" ]]; then
+    PINGSTAT_NOTARY_AUTH_ARGS=(--key "$NOTARY_API_KEY_PATH" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER")
+  elif [[ -n "${NOTARY_APPLE_ID:-}" && -n "${NOTARY_PASSWORD:-}" ]]; then
+    local team="${NOTARY_TEAM_ID:-${DEVELOPMENT_TEAM:-}}"
+    if [[ -z "$team" ]]; then
+      echo "error: PINGSTAT_NOTARIZE=1 with apple-id auth needs NOTARY_TEAM_ID or DEVELOPMENT_TEAM" >&2
+      return 1
+    fi
+    PINGSTAT_NOTARY_AUTH_ARGS=(--apple-id "$NOTARY_APPLE_ID" --password "$NOTARY_PASSWORD" --team-id "$team")
+  else
+    echo "error: PINGSTAT_NOTARIZE=1 needs one of:" >&2
+    echo "  NOTARY_KEYCHAIN_PROFILE, or" >&2
+    echo "  NOTARY_API_KEY_ID + NOTARY_API_ISSUER + NOTARY_API_KEY_PATH, or" >&2
+    echo "  NOTARY_APPLE_ID + NOTARY_PASSWORD (+ NOTARY_TEAM_ID or DEVELOPMENT_TEAM)" >&2
+    return 1
+  fi
+}
+
+# Developer ID–sign a DMG and, when PINGSTAT_NOTARIZE=1, notarize and staple it. Gatekeeper rejects an
+# unsigned downloaded DMG ("no usable signature") even when the app inside is notarized.
+pingstat_sign_notarize_dmg() {
+  local dmg=$1
+  [[ "${PINGSTAT_ADHOC_SIGN:-}" == "1" ]] && return 0
+
+  local identity
+  identity="$(pingstat_developer_id_identity)"
+  if [[ -z "$identity" ]]; then
+    echo "error: no Developer ID Application identity for team ${DEVELOPMENT_TEAM:-?} in keychain" >&2
+    return 1
+  fi
+  echo "==> Signing DMG with: $identity"
+  codesign --force --timestamp --sign "$identity" "$dmg"
+  codesign --verify --strict "$dmg"
+
+  if [[ "${PINGSTAT_NOTARIZE:-}" == "1" ]]; then
+    pingstat_notary_auth_args || return 1
+    echo "==> Notarization: submitting $dmg (notarytool --wait)"
+    xcrun notarytool submit "$dmg" --wait "${PINGSTAT_NOTARY_AUTH_ARGS[@]}"
+    xcrun stapler staple "$dmg"
+    xcrun stapler validate "$dmg"
+  fi
+}
+
 # Verify codesign output for dist/PingStat.app. Mode: developer-id | adhoc
 pingstat_verify_app_signature() {
   local app=$1

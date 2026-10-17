@@ -133,6 +133,9 @@ if [[ "$USE_LAYOUT" -ne 1 ]]; then
   create_plain_dmg "$STAGE"
 fi
 
+pingstat_configure_developer_id_signing >/dev/null || exit 1
+pingstat_sign_notarize_dmg "$DMG"
+
 echo "Done: $DMG"
 case "$DMG_STYLE" in
   create-dmg-polished)
