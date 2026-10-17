@@ -6,8 +6,17 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <link>https://github.com/malcomvetter/PingStat</link>
     <description>PingStat updates</description>
     <language>en</language>
+    <item>
+      <title>PingStat 1.0.0</title>
+      <link>https://github.com/malcomvetter/PingStat/releases/tag/v1.0.0</link>
+      <pubDate>Sat, 17 Oct 2026 03:19:43 GMT</pubDate>
+      <sparkle:version>1</sparkle:version>
+      <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/malcomvetter/PingStat/releases/download/v1.0.0/PingStat-1.0.0-1.zip" sparkle:edSignature="RDBW+uTII7GmA93f2e8M3UP/bNi1jcPv2psGbEQESGeeZoGiG6Fq/eDUpVbdpr0Dbnle41pcO7cZcc3rr1Y8AQ==" length="1794252" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: VU+z/moexDqhxBQnb0d13yxrsUR3Qj8SNM2eoMxQfxPRQV4Z/gQDP3Q7csR4gqswHHzxSwithnv4kDbIgIsJAA==
-length: 572
+edSignature: gw0A6EjMSOV4Q7L4NP2eGhkm3Ldsb+17tVSwehb3e2X54R3JRNOYxyRBFUqn3k0v/8E2+Ag3XJQoxi+uUkzGBg==
+length: 1222
 -->
