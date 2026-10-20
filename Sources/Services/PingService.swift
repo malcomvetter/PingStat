@@ -71,7 +71,7 @@ final class PingService {
                 return PingResponse(target: target, sample: sample)
 
             case let .sendFailed(code), let .recvFailed(code), let .optionFailed(code):
-                logger.log(.error, category: .errors, "ICMP failed errno=\(code)")
+                logger.log(.error, category: .errors, "ICMP failed host=\(target.host) errno=\(code)")
                 let sample = PingSample(
                     timestamp: Date(),
                     success: false,

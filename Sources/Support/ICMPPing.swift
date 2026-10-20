@@ -31,6 +31,7 @@ enum ICMPPing {
             throw ICMPPingError.socketFailed(errno: errno)
         }
         defer { close(fd) }
+        disableSIGPIPE(fd: fd)
 
         let peerLen = socklen_t(MemoryLayout<sockaddr_in>.size)
         let connectResult = withUnsafePointer(to: &peer) { peerPtr in
@@ -58,11 +59,10 @@ enum ICMPPing {
 
         var buffer = [UInt8](repeating: 0, count: 65_536)
 
-        while DispatchTime.now().uptimeNanoseconds < overallDeadline {
-            let remainingNs = overallDeadline - DispatchTime.now().uptimeNanoseconds
-            if remainingNs <= 0 {
-                break
-            }
+        while true {
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard now < overallDeadline else { break }
+            let remainingNs = overallDeadline - now
             let sliceMs = max(1, min(Int(remainingNs / 1_000_000), Int(UInt16.max)))
             try setReceiveTimeout(fd: fd, timeoutMs: sliceMs)
 
@@ -138,6 +138,12 @@ enum ICMPPing {
         }
 
         throw ICMPPingError.resolveFailed(trimmed)
+    }
+
+    /// Makes a failed send return `EPIPE` instead of raising `SIGPIPE`.
+    nonisolated static func disableSIGPIPE(fd: Int32) {
+        var on: Int32 = 1
+        _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
     }
 
     private nonisolated static func setReceiveTimeout(fd: Int32, timeoutMs: Int) throws {

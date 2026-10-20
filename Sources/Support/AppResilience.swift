@@ -8,6 +8,9 @@ import os
 /// The handler must not capture external state (C function pointer requirement).
 enum AppResilience {
     static func install() {
+        // A send on a socket the kernel has torn down (sleep/wake, interface change) raises SIGPIPE,
+        // whose default action kills the process without a crash report. Probes handle EPIPE as an error.
+        signal(SIGPIPE, SIG_IGN)
         NSSetUncaughtExceptionHandler { exception in
             let stack = exception.callStackSymbols.prefix(16).joined(separator: " │ ")
             let msg =

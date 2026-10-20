@@ -98,6 +98,7 @@ enum DNSUDPQuery {
         let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
         guard fd >= 0 else { throw DNSUDPError.socketFailed(errno) }
         defer { close(fd) }
+        ICMPPing.disableSIGPIPE(fd: fd)
 
         let peerLen = socklen_t(MemoryLayout<sockaddr_in>.size)
         let sent = payload.withUnsafeBytes { raw -> ssize_t in
@@ -115,9 +116,10 @@ enum DNSUDPQuery {
         let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(max(1, timeoutMs)) * 1_000_000
         var buffer = [UInt8](repeating: 0, count: 65_536)
 
-        while DispatchTime.now().uptimeNanoseconds < deadline {
-            let remainingNs = deadline - DispatchTime.now().uptimeNanoseconds
-            if remainingNs <= 0 { break }
+        while true {
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard now < deadline else { break }
+            let remainingNs = deadline - now
             let sliceMs = max(1, min(Int(remainingNs / 1_000_000), Int(UInt16.max)))
             try setReceiveTimeout(fd: fd, timeoutMs: sliceMs)
 
@@ -165,6 +167,7 @@ enum DNSUDPQuery {
         let fd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP)
         guard fd >= 0 else { throw DNSUDPError.socketFailed(errno) }
         defer { close(fd) }
+        ICMPPing.disableSIGPIPE(fd: fd)
 
         let peerLen = socklen_t(MemoryLayout<sockaddr_in6>.size)
         let sent = payload.withUnsafeBytes { raw -> ssize_t in
@@ -182,9 +185,10 @@ enum DNSUDPQuery {
         let deadline = DispatchTime.now().uptimeNanoseconds + UInt64(max(1, timeoutMs)) * 1_000_000
         var buffer = [UInt8](repeating: 0, count: 65_536)
 
-        while DispatchTime.now().uptimeNanoseconds < deadline {
-            let remainingNs = deadline - DispatchTime.now().uptimeNanoseconds
-            if remainingNs <= 0 { break }
+        while true {
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard now < deadline else { break }
+            let remainingNs = deadline - now
             let sliceMs = max(1, min(Int(remainingNs / 1_000_000), Int(UInt16.max)))
             try setReceiveTimeout(fd: fd, timeoutMs: sliceMs)
 
