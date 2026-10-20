@@ -2,6 +2,8 @@
 
 PingStat is a **menu bar utility for macOS** that watches **how your network actually feels**: ICMP latency to your **default gateway** and to several **public WAN targets**, plus **DNS reachability** against your system resolvers and sensible fallbacks. It rolls everything into a single **health state** you can read at a glance from the icon, then opens up for detail when you want it.
 
+![PingStat menu showing local network, Cloudflare, and Google latency](docs/screenshot.png)
+
 ## Features
 
 ### At a glance
